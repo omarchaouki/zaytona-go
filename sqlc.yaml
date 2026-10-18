@@ -1,0 +1,52 @@
+version: "2"
+sql:
+  - engine: postgresql
+    schema: internal/db/migrations # sqlc understands goose Up/Down annotations
+    queries: internal/db/queries
+    gen:
+      go:
+        package: dbq
+        out: internal/db/dbq
+        sql_package: pgx/v5
+        emit_pointers_for_null_types: true
+        emit_empty_slices: true
+        emit_prepared_queries: false
+        emit_json_tags: false
+        overrides:
+          - db_type: numeric
+            go_type: github.com/shopspring/decimal.Decimal
+          - db_type: numeric
+            nullable: true
+            go_type:
+              import: github.com/shopspring/decimal
+              type: NullDecimal
+          # numeric(p,s) columns are reported as pg_catalog.numeric
+          - db_type: pg_catalog.numeric
+            go_type: github.com/shopspring/decimal.Decimal
+          - db_type: pg_catalog.numeric
+            nullable: true
+            go_type:
+              import: github.com/shopspring/decimal
+              type: NullDecimal
+          - db_type: pg_catalog.timestamptz
+            go_type: time.Time
+          - db_type: pg_catalog.timestamptz
+            nullable: true
+            go_type: { import: time, type: Time, pointer: true }
+          - db_type: timestamptz
+            nullable: true
+            go_type: { import: time, type: Time, pointer: true }
+          - db_type: date
+            nullable: true
+            go_type: { import: time, type: Time, pointer: true }
+          - db_type: uuid
+            go_type: github.com/google/uuid.UUID
+          - db_type: uuid
+            nullable: true
+            go_type:
+              import: github.com/google/uuid
+              type: NullUUID
+          - db_type: timestamptz
+            go_type: time.Time
+          - db_type: jsonb
+            go_type: encoding/json.RawMessage

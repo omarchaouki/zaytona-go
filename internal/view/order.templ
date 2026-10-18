@@ -1,0 +1,324 @@
+package view
+
+import (
+	"strconv"
+
+	"github.com/omarchaouki/zaytona-go/internal/i18n"
+)
+
+// OrderForm: three steps (1 quantity, 2 details, 3 review and send) in one
+// form. Without JS every step shows and the form posts normally (full page).
+// With JS (landing.js) only the current step shows, each step is validated
+// before moving on, and the order is sent with fetch (retry, recovery box).
+// The proof of work needs JS: without it, <noscript> points to WhatsApp/phone.
+templ OrderForm(p Page, f OrderFormData) {
+	<form
+		method="post"
+		action={ templ.SafeURL(p.LocalHref("/order")) }
+		novalidate
+		data-order-form
+		data-delivery-mode={ f.DeliveryMode }
+		data-delivery-fee={ f.DeliveryFee }
+		data-delivery-free-above={ f.DeliveryFreeAbove }
+		data-locale={ string(p.Locale) }
+		data-messages={ f.ScriptMessages }
+		data-wa-number={ p.Settings.WhatsApp.Number }
+		class="sheet relative rounded-3xl p-5 sm:p-10"
+	>
+		<input type="hidden" name="form_token" value={ f.FormToken }/>
+		<input type="hidden" name="altcha" value="" data-altcha/>
+		<input type="hidden" name="attribution" value="" data-attribution/>
+		@orderStepper(p, f.Step)
+		// ---------------------------------------------------- 1. quantity
+		<section data-step="0" data-current?={ f.Step == 0 } class="step-enter">
+			<fieldset aria-describedby={ errID(f, "choice") }>
+				<legend class="sr-only">{ p.T(i18n.OrderFormProductsLegend) }</legend>
+				<h3 tabindex="-1" data-step-heading class="text-step-lead outline-none">{ p.T(i18n.OrderFormProductsLegend) }</h3>
+				<ul class="mt-3 grid gap-2">
+					for _, o := range f.Offers {
+						<li>
+							<label class={ optionClass(f.Choice == o.Slug, o.Unavailable) }>
+								<input type="radio" name="offer" value={ o.Slug } checked?={ f.Choice == o.Slug } disabled?={ o.Unavailable } data-price={ o.PriceRaw } data-label={ o.SizeLabel + " " + o.Name } class="size-5 shrink-0 accent-olive"/>
+								<span class="min-w-0 flex-1">
+									<span class="block font-semibold tabular-nums">{ o.SizeLabel }</span>
+									<span class="block text-sm text-ink-soft">{ o.Name }</span>
+								</span>
+								<span class="shrink-0 text-end font-semibold tabular-nums">
+									if o.Unavailable {
+										{ p.T(i18n.OrderFormUnavailable) }
+									} else {
+										{ o.Price }
+									}
+								</span>
+							</label>
+						</li>
+					}
+					if f.Custom != nil {
+						<li>
+							<label class={ optionClass(f.Choice == "custom", false) }>
+								<input type="radio" name="offer" value="custom" checked?={ f.Choice == "custom" } data-price-per-liter={ f.Custom.PerLiterRaw } data-min={ strconv.Itoa(f.Custom.Min) } data-max={ strconv.Itoa(f.Custom.Max) } class="size-5 shrink-0 accent-olive"/>
+								<span class="min-w-0 flex-1 font-semibold">{ p.T(i18n.OrderFormCustomOption) }</span>
+								<span class="shrink-0 text-sm text-ink-soft tabular-nums">{ f.Custom.PerLiterLabel }</span>
+							</label>
+							<div data-custom-liters class="mt-2 rounded-2xl bg-sand/60 p-3">
+								@formField("order-liters", p.T(i18n.OrderFormLitersLabel), f.Custom.Hint, f.Errors["customLiters"], "") {
+									// The number reads left to right on both pages: the box is LTR so
+									// "end" is the physical right, where the unit sits.
+									<div class="relative" dir="ltr">
+										<input id="order-liters" name="liters" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" autocomplete="off" enterkeyhint="next" dir="ltr" value={ f.CustomLiters } aria-invalid?={ f.HasError("customLiters") } aria-describedby={ describedBy(f, "customLiters", "order-liters", true) } class="field-input pe-14 text-lg font-bold tabular-nums"/>
+										<span class="pointer-events-none absolute inset-y-0 end-4 flex items-center text-ink-soft">{ p.T(i18n.OrderFormLitersUnit) }</span>
+									</div>
+								}
+							</div>
+						</li>
+					}
+				</ul>
+				<p id="choice-error" data-error-for="choice" role="alert" hidden?={ !f.HasError("choice") } class="mt-2 text-sm font-medium text-danger">{ f.Errors["choice"] }</p>
+			</fieldset>
+			<p class="mt-4 flex items-baseline justify-between gap-3 rounded-2xl bg-sand/70 px-4 py-3" aria-live="polite">
+				<span class="text-sm text-ink-soft" data-total-label>{ f.TotalLabel }</span>
+				<span class="text-step-lead tabular-nums" data-total>{ f.Total }</span>
+			</p>
+		</section>
+		// ------------------------------------------------- 2. your details
+		<section data-step="1" data-current?={ f.Step == 1 } class="step-enter">
+			<h3 tabindex="-1" data-step-heading class="text-step-lead outline-none">{ p.T(i18n.OrderFormDetailsTitle) }</h3>
+			<div class="mt-4 grid gap-5 sm:grid-cols-2">
+				@formField("order-name", p.T(i18n.OrderFormName), "", f.Errors["name"], "") {
+					<input id="order-name" name="name" type="text" autocomplete="name" enterkeyhint="next" maxlength="80" value={ f.Name } aria-invalid?={ f.HasError("name") } aria-describedby={ describedBy(f, "name", "order-name", false) } class="field-input"/>
+				}
+				@formField("order-phone", p.T(i18n.OrderFormPhone), p.T(i18n.OrderFormPhoneHint), f.Errors["phone"], "") {
+					<input id="order-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" enterkeyhint="next" maxlength="40" dir="ltr" placeholder="06 12 34 56 78" value={ f.Phone } aria-invalid?={ f.HasError("phone") } aria-describedby={ describedBy(f, "phone", "order-phone", true) } class="field-input text-start rtl:text-end"/>
+				}
+				<div class="sm:col-span-2">
+					@formField("order-city", p.T(i18n.OrderFormCity), p.T(i18n.OrderFormCityHint), f.Errors["city"], "") {
+						<div class="relative" data-city-combobox>
+							<input id="order-city" name="city" type="text" autocomplete="address-level2" enterkeyhint="next" maxlength="80" value={ f.City } aria-invalid?={ f.HasError("city") } aria-describedby={ describedBy(f, "city", "order-city", true) } class="field-input"/>
+							<div id="order-city-list" role="listbox" aria-label={ p.T(i18n.OrderFormCitySuggestions) } hidden class="absolute inset-x-0 top-full z-20 mt-1 max-h-64 overflow-auto rounded-2xl border border-sand-deep bg-white py-1 shadow-float"></div>
+						</div>
+					}
+				</div>
+				@formField("order-address", p.T(i18n.OrderFormAddress), "", f.Errors["address"], p.T(i18n.OrderFormOptional)) {
+					<textarea id="order-address" name="address" rows="2" autocomplete="street-address" maxlength="300" aria-invalid?={ f.HasError("address") } aria-describedby={ describedBy(f, "address", "order-address", false) } class="field-input py-3">{ f.Address }</textarea>
+				}
+				@formField("order-note", p.T(i18n.OrderFormNote), "", f.Errors["note"], p.T(i18n.OrderFormOptional)) {
+					<textarea id="order-note" name="note" rows="2" maxlength="500" placeholder={ p.T(i18n.OrderFormNotePlaceholder) } aria-invalid?={ f.HasError("note") } aria-describedby={ describedBy(f, "note", "order-note", false) } class="field-input py-3">{ f.Note }</textarea>
+				}
+			</div>
+		</section>
+		// ---------------------------------------------- 3. review and send
+		<section data-step="2" data-current?={ f.Step == 2 } class="step-enter">
+			<h3 tabindex="-1" data-step-heading class="text-step-lead outline-none">{ p.T(i18n.OrderFormReviewTitle) }</h3>
+			<div class="mt-4 space-y-4">
+				@reviewBlock(p, p.T(i18n.OrderFormReviewProducts), 0, p.T(i18n.OrderFormStep1)) {
+					<ul class="space-y-1" data-review-lines>
+						for _, l := range f.Lines {
+							<li class="flex justify-between gap-3">
+								<span>{ l.Label }</span>
+								<span class="shrink-0 font-medium tabular-nums">{ l.Amount }</span>
+							</li>
+						}
+					</ul>
+				}
+				@reviewBlock(p, p.T(i18n.OrderFormReviewDetails), 1, p.T(i18n.OrderFormStep2)) {
+					<p class="font-medium" data-review="name">{ f.Name }</p>
+					<p class="text-ink-soft tabular-nums" dir="ltr" data-review="phone">{ f.Phone }</p>
+					<p data-review="city">{ f.City }</p>
+					<p class="whitespace-pre-line text-ink-soft" data-review="address">{ f.Address }</p>
+					<p class="text-sm text-ink-soft" data-review="note">{ f.Note }</p>
+				}
+				<dl class="space-y-1.5 rounded-2xl bg-sand/70 p-4 sm:p-5">
+					<div class="flex items-baseline justify-between gap-4">
+						<dt class="text-ink-soft">{ p.T(i18n.OrderFormSubtotal) }</dt>
+						<dd class="font-medium tabular-nums" data-subtotal>{ f.Subtotal }</dd>
+					</div>
+					<div class="flex items-baseline justify-between gap-4">
+						<dt class="text-ink-soft">{ p.T(i18n.OrderFormDelivery) }</dt>
+						<dd class="font-medium tabular-nums" data-delivery>{ f.DeliveryText }</dd>
+					</div>
+					<div class="flex items-baseline justify-between gap-4 border-t border-sand-deep pt-2">
+						<dt class="font-semibold" data-total-label>{ f.TotalLabel }</dt>
+						<dd class="text-step-lead tabular-nums" data-total>{ f.Total }</dd>
+					</div>
+				</dl>
+			</div>
+			if f.TurnstileSiteKey != "" {
+				<div class="cf-turnstile mt-4" data-sitekey={ f.TurnstileSiteKey }></div>
+				<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer nonce={ p.Nonce }></script>
+			}
+			<div data-duplicate role="alert" hidden?={ f.Duplicate == "" } class="mt-6 rounded-2xl bg-oil-soft/60 p-4">
+				<p class="font-semibold">{ p.T(i18n.OrderFormDuplicateTitle) }</p>
+				<p class="mt-1 text-ink" data-duplicate-text>{ f.Duplicate }</p>
+				<div class="mt-3 flex flex-wrap gap-3">
+					<button type="submit" name="confirm_duplicate" value="1" data-confirm-duplicate class={ btn("md"), actSecondary }>{ p.T(i18n.OrderFormDuplicateConfirm) }</button>
+					@WALink(p, "order_section", "", textLink, "") {
+						{ p.T(i18n.FaqMoreLink) }
+					}
+				</div>
+			</div>
+		</section>
+		// Honeypot: off-screen, skipped by keyboard and screen readers.
+		<div aria-hidden="true" class="absolute -start-[9999px] h-px w-px overflow-hidden">
+			<label>
+				{ p.T(i18n.OrderFormHoneypot) }
+				<input type="text" name="website" tabindex="-1" autocomplete="off"/>
+			</label>
+		</div>
+		<div data-form-error role="alert" hidden?={ f.FormError == "" } class="mt-6 rounded-2xl bg-danger/[0.07] p-g2">
+			<p class="flex items-start gap-2 font-medium text-danger">
+				@IconAlertCircle("mt-0.5 size-5 shrink-0")
+				<span data-form-error-text>{ f.FormError }</span>
+			</p>
+			<div data-recovery hidden>
+				<p class="mt-1 text-sm text-ink-soft">{ p.T(i18n.OrderFormDraftKept) }</p>
+				<div class="mt-g1 flex flex-col gap-2 sm:flex-row">
+					<button type="submit" class={ btn("md"), actSecondary, "sm:flex-1" }>{ p.T(i18n.OrderFormRetry) }</button>
+					@WALink(p, "order_section", "", btn("md")+" btn-press inline-flex bg-whatsapp text-whatsapp-ink hover:brightness-95 sm:flex-1", "") {
+						@WhatsAppIcon("")
+						{ p.T(i18n.OrderFormSendByWhatsapp) }
+					}
+				</div>
+			</div>
+		</div>
+		// Wraps on the narrowest phones (320 px) instead of overflowing.
+		<div class="mt-6 flex flex-wrap gap-3">
+			<button type="button" data-back hidden class={ btn("lg"), "btn-press inline-flex shrink-0 bg-sand text-ink hover:bg-sand-deep/70" }>{ p.T(i18n.OrderFormBack) }</button>
+			// Moss "Continue" on steps 1 and 2 and "Send" on the last one (data-final).
+			<button type="submit" data-submit data-final data-label-next={ p.T(i18n.OrderFormNext) } data-label-submit={ p.T(i18n.OrderFormSubmit) } data-label-sending={ p.T(i18n.OrderFormSubmitting) } class={ btn("lg", "whitespace-normal"), actPrimary, "min-w-[10rem] flex-1" }>
+				{ p.T(i18n.OrderFormSubmit) }
+			</button>
+		</div>
+		<p class="mt-4 flex items-start justify-center gap-2 text-center text-sm text-ink-soft">
+			@IconShieldCheck("mt-0.5 size-4 shrink-0 text-olive-600")
+			{ p.T(i18n.OrderFormPayOnDelivery) }
+		</p>
+	</form>
+}
+
+var orderSteps = []i18n.Key{i18n.OrderFormStep1, i18n.OrderFormStep2, i18n.OrderFormStep3}
+
+// orderStepper: the three steps; done steps are buttons back to them (JS).
+templ orderStepper(p Page, current int) {
+	<nav aria-label={ p.T(i18n.OrderFormProgressLabel) } class="mb-g3" data-stepper>
+		<p class="sr-only" aria-live="polite" data-step-status>
+			{ p.T(i18n.OrderFormStepOf, "current", strconv.Itoa(current+1), "total", "3") }: { p.T(orderSteps[current]) }
+		</p>
+		<ol class="flex items-center gap-2">
+			for i, label := range orderSteps {
+				<li class="flex flex-1 items-center gap-2 last:flex-none">
+					<button type="button" data-goto={ strconv.Itoa(i) } disabled?={ i >= current } aria-current?={ i == current } data-done?={ i < current } class="group flex items-center gap-2 text-sm font-medium text-ink-soft transition-colors disabled:cursor-default data-[done]:text-olive aria-[current]:text-ink">
+						<span class="flex size-11 shrink-0 items-center justify-center rounded-full bg-sand text-sm font-bold tabular-nums text-ink-soft transition-colors group-data-[done]:bg-olive-700 group-data-[done]:text-white group-aria-[current]:bg-olive group-aria-[current]:text-white">
+							{ strconv.Itoa(i + 1) }
+						</span>
+						<span class="hidden group-aria-[current]:inline sm:inline">{ p.T(label) }</span>
+					</button>
+					if i < len(orderSteps)-1 {
+						<span aria-hidden="true" data-step-line data-done?={ i < current } class="h-1 flex-1 rounded-full bg-sand data-[done]:bg-olive-700"></span>
+					}
+				</li>
+			}
+		</ol>
+	</nav>
+}
+
+templ reviewBlock(p Page, title string, step int, stepLabel string) {
+	<div class="rounded-2xl bg-limewash/70 p-4">
+		<div class="mb-2 flex items-center justify-between gap-3">
+			<p class="text-sm font-semibold">{ title }</p>
+			<button type="button" data-goto={ strconv.Itoa(step) } aria-label={ p.T(i18n.OrderFormEditStep, "step", stepLabel) } class="tap -my-2 inline-flex items-center gap-1 px-2 text-sm text-olive underline-offset-4 hover:underline">
+				@IconPencil("size-3.5")
+				{ p.T(i18n.OrderFormEdit) }
+			</button>
+		</div>
+		{ children... }
+	</div>
+}
+
+// formField: label (+ optional marker), the control, error then hint.
+templ formField(id, label, hint, err, optionalLabel string) {
+	<div>
+		<label for={ id } class="mb-1.5 block font-medium">
+			{ label }
+			if optionalLabel != "" {
+				<span class="ms-1.5 text-sm font-normal text-ink-soft">({ optionalLabel })</span>
+			}
+		</label>
+		{ children... }
+		<p id={ id + "-error" } data-error hidden?={ err == "" } class="mt-1.5 text-sm font-medium text-danger">{ err }</p>
+		if hint != "" {
+			<p id={ id + "-hint" } class="mt-1.5 text-sm text-ink-soft">{ hint }</p>
+		}
+	</div>
+}
+
+// OrderSection: the heading and the other ways to order beside the form,
+// which sits on a paper sheet.
+templ OrderSection(p Page, f OrderFormData) {
+	<section id="order" aria-labelledby="order-title" class="scroll-mt-4">
+		<div class="container-page section-y grid gap-12 lg:grid-cols-[minmax(0,4fr)_minmax(0,7fr)] lg:grid-rows-[auto_auto_1fr] lg:gap-x-20 lg:gap-y-0">
+			<h2 data-reveal id="order-title" class="text-step-head lg:col-span-2 lg:mb-12">{ p.T(i18n.OrderTitle) }</h2>
+			<p data-reveal class="max-w-[36ch] text-step-body lg:col-start-1 lg:row-start-2">{ p.T(i18n.OrderIntro) }</p>
+			<div data-reveal class="stagger-10 lg:col-start-2 lg:row-span-2 lg:row-start-2">
+				@OrderForm(p, f)
+			</div>
+			if p.WAHref("") != "" || p.FirstPhone() != "" {
+				<div class="lg:col-start-1 lg:row-start-3 lg:pt-12">
+					<p class="font-semibold">{ p.T(i18n.OrderAltTitle) }</p>
+					<ul class="mt-2">
+						if p.WAHref("") != "" {
+							<li>
+								@WALink(p, "order_section", "", textLink, "") {
+									@WhatsAppIcon("size-5 text-whatsapp-deep")
+									{ p.T(i18n.OrderByWhatsapp) }
+								}
+							</li>
+						}
+						if phone := p.FirstPhone(); phone != "" {
+							<li>
+								<a href={ templ.SafeURL("tel:" + phone) } class={ textLink }>
+									@IconPhone("size-5")
+									{ p.T(i18n.OrderByPhone) } · <span dir="ltr">{ phoneDisplay(phone) }</span>
+								</a>
+							</li>
+						}
+					</ul>
+				</div>
+			}
+		</div>
+	</section>
+}
+
+func optionClass(selected, disabled bool) string {
+	c := "flex min-h-14 cursor-pointer items-center gap-3 rounded-2xl border-2 px-3 py-3 transition-colors has-[:checked]:border-olive has-[:checked]:bg-olive/10 "
+	if selected {
+		c += "border-olive bg-olive/10"
+	} else {
+		c += "border-sand bg-white hover:border-olive/50"
+	}
+	if disabled {
+		c += " cursor-not-allowed opacity-60"
+	}
+	return c
+}
+
+func errID(f OrderFormData, field string) string {
+	if f.HasError(field) {
+		return field + "-error"
+	}
+	return ""
+}
+
+// describedBy lists the error (when present) then the hint ids.
+func describedBy(f OrderFormData, field, id string, hint bool) string {
+	s := ""
+	if f.HasError(field) {
+		s = id + "-error"
+	}
+	if hint {
+		if s != "" {
+			s += " "
+		}
+		s += id + "-hint"
+	}
+	return s
+}

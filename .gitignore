@@ -1,0 +1,43 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Local data
+.data/
+uploads/
+*.dump
+*.sql.gz
+
+# Build output & Binaries
+bin/
+tools/bin/
+web/static/dist/*
+!web/static/dist/.gitkeep
+
+# Go specific binaries (Crucial to add)
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+zaytona.exe
+
+# Test and tooling output
+coverage.out
+testdata/fuzz/**/corpus-tmp/
+tests/e2e/screenshots/
+.lighthouseci/
+
+# Editors / OS / Local AI
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+.claude/          # Added to ignore Claude local config
+
+# Design tooling (taste-skill working files)
+.taste-skill/
+taste-skill/      # Added in case it doesn't have the dot prefix

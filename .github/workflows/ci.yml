@@ -1,0 +1,140 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Pin every action to a full commit SHA (with the version in a comment) once the
+# repo exists; Dependabot keeps SHAs current.
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: go-task/setup-task@v1
+        with:
+          version: 3.x
+      - name: Tools
+        run: task tools
+      - name: Check (fmt, generate, vet, lint, test, vuln)
+        run: task check
+      - name: Build
+        run: task build
+      - name: Size budgets (built assets)
+        run: go test ./web -run Budget -count=1
+
+  e2e:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: olive
+          POSTGRES_PASSWORD: olive
+          POSTGRES_DB: olive
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U olive" --health-interval 5s --health-retries 10
+    env:
+      APP_ENV: development
+      DATABASE_URL: postgres://olive:olive@localhost:5432/olive
+      APP_SECRET: ${{ github.run_id }}-ci-only-secret-0123456789abcdef0123456789
+      ADMIN_EMAIL: ci@example.com
+      ADMIN_PASSWORD: ci-seed-password-only # seed: change forced at first login
+      NEW_PASSWORD: ci-owner-password-after-change
+      E2E_ADMIN_EMAIL: ci@example.com
+      E2E_ADMIN_PASSWORD: ci-owner-password-after-change
+      AUDIT_ADMIN_EMAIL: ci@example.com
+      AUDIT_ADMIN_PASSWORD: ci-owner-password-after-change
+      BASE_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: go-task/setup-task@v1
+        with:
+          version: 3.x
+      - run: task tools && task build
+      - run: ./bin/zaytona migrate && ./bin/zaytona seed
+      - name: Start server
+        run: ./bin/zaytona serve > server.log 2>&1 &
+      - name: Wait for server
+        run: for i in $(seq 30); do ./bin/zaytona healthcheck && exit 0; sleep 1; done; cat server.log; exit 1
+      - name: First login (forced password change of the seeded owner)
+        run: go run ./tests/e2e/cmd/firstlogin
+      - name: E2E scenarios (chromedp, preinstalled Chrome on the runner)
+        run: task e2e
+      - name: Mobile audit (public + admin, AR + FR, 320 to 1024 px)
+        run: task audit:mobile
+      # Lighthouse needs Node; it runs only in CI, never on dev machines.
+      - uses: treosh/lighthouse-ci-action@v12
+        with:
+          urls: |
+            http://localhost:3000/ar
+            http://localhost:3000/fr
+          configPath: .github/lighthouserc.json
+          uploadArtifacts: true
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-log
+          path: server.log
+
+  image:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: olive
+          POSTGRES_PASSWORD: olive
+          POSTGRES_DB: olive
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U olive" --health-interval 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Build the production image
+        run: docker build --build-arg VERSION=${{ github.sha }} -t zaytona:ci .
+      - name: Image runs as non-root with no shell
+        run: |
+          test "$(docker inspect -f '{{.Config.User}}' zaytona:ci)" = "nonroot:nonroot"
+          ! docker run --rm --entrypoint /bin/sh zaytona:ci -c true
+          docker run --rm zaytona:ci version
+      - name: Migrate, seed and serve read-only, then probe the health check
+        env:
+          DB: postgres://olive:olive@127.0.0.1:5432/olive?sslmode=disable
+          SECRET: ${{ github.run_id }}-image-only-secret-0123456789abcdef0123456789abcdef
+        run: |
+          common="--network host -e APP_ENV=production -e SITE_URL=https://ci.example -e DATABASE_URL=$DB -e APP_SECRET=$SECRET"
+          docker run --rm $common zaytona:ci migrate
+          docker run --rm $common zaytona:ci seed
+          docker run -d --name app --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges $common zaytona:ci
+          for i in $(seq 30); do docker exec app /zaytona healthcheck && break; sleep 1; done
+          docker exec app /zaytona healthcheck
+          curl -fsS -o /dev/null http://127.0.0.1:3000/ar
+          docker logs app | tail -20

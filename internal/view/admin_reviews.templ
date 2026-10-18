@@ -1,0 +1,267 @@
+package view
+
+import (
+	"time"
+
+	"github.com/omarchaouki/zaytona-go/internal/i18n"
+)
+
+// AdminReviewsData fills Admin > Reviews.
+type AdminReviewsData struct {
+	Status   string // pending, approved, rejected, all
+	Q        string
+	Counts   map[string]int64
+	Rows     []AdminReviewRow
+	Page     int
+	NextURL  string
+	PrevURL  string
+	Return   string // this list, to come back to after an action
+}
+
+// AdminReviewRow is one review in the moderation list.
+type AdminReviewRow struct {
+	ID, Name, City, Comment, Original, ReplyAr, ReplyFr, Reason, Status string
+	OrderReference                                                      string
+	Rating                                                              int
+	Featured, Verified, Demo                                            bool
+	Photo                                                               Image
+	CreatedAt                                                           time.Time
+}
+
+var reviewTabs = []struct {
+	Key   string
+	Label i18n.Key
+}{
+	{"pending", i18n.AdminReviewsPending},
+	{"approved", i18n.AdminReviewsApproved},
+	{"rejected", i18n.AdminReviewsRejected},
+	{"all", i18n.AdminReviewsAll},
+}
+
+func (d AdminReviewsData) tabHref(key string) string {
+	href := "/admin/reviews?status=" + key
+	if d.Q != "" {
+		href += "&q=" + urlQuery(d.Q)
+	}
+	return href
+}
+
+templ AdminReviews(p AdminPage, d AdminReviewsData) {
+	@AdminShell(p) {
+		<div>
+			<h1 class="text-h2">{ p.T(i18n.AdminReviewsTitle) }</h1>
+			<div class="mt-g3 flex flex-col gap-g1 sm:flex-row sm:items-center">
+				<nav aria-label={ p.T(i18n.AdminReviewsTitle) } class="flex gap-1 overflow-x-auto rounded-full bg-white p-1 ring-1 ring-sand-deep sm:inline-flex sm:gap-g1">
+					for _, tab := range reviewTabs {
+						<a href={ templ.SafeURL(d.tabHref(tab.Key)) } aria-current?={ d.Status == tab.Key } class={ "tap inline-flex flex-auto items-center justify-center gap-1 rounded-full px-2 text-sm font-medium whitespace-nowrap transition-colors sm:flex-none sm:gap-1.5 sm:px-4", templ.KV("bg-olive text-limewash", d.Status == tab.Key), templ.KV("text-ink hover:bg-sand", d.Status != tab.Key) }>
+							{ p.T(tab.Label) }
+							if n := d.Counts[tab.Key]; n > 0 && tab.Key != "all" {
+								<span class={ "rounded-full px-2 py-0.5 text-xs font-bold tabular-nums", templ.KV("bg-oil text-olive-950", tab.Key == "pending"), templ.KV("bg-sand-deep/70 text-ink", tab.Key != "pending") }>{ i64(n) }</span>
+							}
+						</a>
+					}
+				</nav>
+				<form method="get" action="/admin/reviews" class="relative block w-full sm:ms-auto sm:w-72">
+					<input type="hidden" name="status" value={ d.Status }/>
+					<label for="reviews-q" class="sr-only">{ p.T(i18n.AdminReviewsSearch) }</label>
+					@IconSearch("pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-ink-soft")
+					<input id="reviews-q" type="search" name="q" value={ d.Q } maxlength="100" placeholder={ p.T(i18n.AdminReviewsSearch) } class="field-input min-h-11 ps-9"/>
+				</form>
+			</div>
+			if len(d.Rows) > 0 {
+				<form id="bulk" method="post" action="/admin/reviews/bulk" data-bulk class="sticky top-14 z-20 mt-g2 flex flex-wrap items-center gap-g2 rounded-card bg-olive-950 px-4 py-3 text-limewash shadow-lift lg:top-2">
+					@csrfField(p)
+					<input type="hidden" name="return" value={ d.Return }/>
+					<span class="font-bold" data-bulk-count data-template={ p.T(i18n.AdminReviewsSelected, "count", "{count}") }>{ p.T(i18n.AdminReviewsSelected, "count", "0") }</span>
+					<button type="submit" name="action" value="approve" class={ btn("md", "whitespace-normal"), "inline-flex bg-oil text-olive-950 hover:bg-oil-bright" }>
+						@IconCheck("")
+						{ p.T(i18n.AdminReviewsBulkApprove) }
+					</button>
+					<button type="submit" name="action" value="reject" class={ btn("md", "whitespace-normal"), "inline-flex border border-limewash/30 text-limewash hover:bg-limewash/10" }>
+						@IconX("")
+						{ p.T(i18n.AdminReviewsBulkReject) }
+					</button>
+				</form>
+			}
+			if len(d.Rows) == 0 {
+				<p class="mt-g3 rounded-card bg-white p-g4 text-center text-ink-soft">{ p.T(i18n.AdminReviewsEmpty) }</p>
+			} else {
+				<ul class="mt-g3 space-y-g2">
+					for _, r := range d.Rows {
+						@adminReviewRow(p, d, r)
+					}
+				</ul>
+			}
+			if d.PrevURL != "" || d.NextURL != "" {
+				<nav aria-label={ p.T(i18n.AdminOrdersPagination) } class="mt-4 flex items-center justify-between gap-2">
+					if d.PrevURL != "" {
+						<a href={ templ.SafeURL(d.PrevURL) } rel="prev" class={ btn("md", "px-3"), "inline-flex border border-olive/30 text-olive hover:bg-olive/5" }>
+							@IconChevronPrev("")
+							{ p.T(i18n.AdminOrdersPrev) }
+						</a>
+					} else {
+						<span></span>
+					}
+					if d.NextURL != "" {
+						<a href={ templ.SafeURL(d.NextURL) } rel="next" class={ btn("md", "px-3"), "inline-flex border border-olive/30 text-olive hover:bg-olive/5" }>
+							{ p.T(i18n.AdminOrdersNext) }
+							@IconChevronNext("")
+						</a>
+					}
+				</nav>
+			}
+			if p.Owner {
+				@ConfirmDialog(p, "confirm-review", p.T(i18n.AdminCommonDeleteTitle), p.T(i18n.AdminReviewsDeleteBody))
+			}
+		</div>
+	}
+}
+
+templ reviewAction(p AdminPage, d AdminReviewsData, r AdminReviewRow, action, class string) {
+	<form method="post" action={ templ.SafeURL("/admin/reviews/" + r.ID + "/" + action) } class="contents">
+		@csrfField(p)
+		<input type="hidden" name="return" value={ d.Return }/>
+		<button type="submit" class={ btn("md", "px-3", "whitespace-normal"), "inline-flex w-full min-w-0 leading-tight sm:w-auto sm:px-5", class }>
+			{ children... }
+		</button>
+	</form>
+}
+
+templ adminReviewRow(p AdminPage, d AdminReviewsData, r AdminReviewRow) {
+	<li class={ "rounded-card bg-white p-g2 shadow-lift ring-1 ring-sand-deep/50 sm:p-g3", templ.KV("border-s-4 border-s-oil", r.Status == "pending") }>
+		<div class="flex items-start gap-g2">
+			<label class="tap -m-2.5 inline-flex shrink-0 cursor-pointer items-center justify-center">
+				<input type="checkbox" form="bulk" name="ids" value={ r.ID } data-select-row class="size-5 accent-olive" aria-label={ p.T(i18n.AdminReviewsSelectRow, "name", r.Name) }/>
+			</label>
+			<div class="min-w-0 flex-1">
+				<div class="flex flex-wrap items-center gap-x-g1 gap-y-1">
+					<p class="font-bold break-words"><bdi>{ r.Name }</bdi></p>
+					if r.City != "" {
+						<p class="text-sm text-ink-soft">· <bdi>{ r.City }</bdi></p>
+					}
+					@Stars(float64(r.Rating), "sm", p.T(i18n.ReviewsStarsLabel, "rating", itoa(r.Rating)), "arv-"+r.ID, "")
+					if r.Featured {
+						<span class="inline-flex items-center gap-1 rounded-full bg-oil-soft px-2 py-0.5 text-xs font-bold text-oil-deep">{ p.T(i18n.AdminReviewsFeatured) }</span>
+					}
+					<span class="text-xs text-ink-soft">{ p.dateLong(r.CreatedAt) }</span>
+					if r.Demo {
+						<span class="rounded-full bg-ink/80 px-2 py-0.5 text-xs font-medium text-limewash">{ p.T(i18n.ReviewsDemo) }</span>
+					}
+					if d.Status == "all" {
+						<span class="rounded-full bg-sand px-2 py-0.5 text-xs font-medium text-ink">{ p.reviewStatusLabel(r.Status) }</span>
+					}
+				</div>
+				if r.Verified && r.OrderReference != "" {
+					<p class="mt-1 inline-flex items-center gap-1 text-xs font-bold text-olive-600">
+						@IconBadgeCheck("size-4")
+						{ p.T(i18n.AdminReviewsVerified, "reference", r.OrderReference) }
+					</p>
+				}
+				<p class="mt-g1 break-words whitespace-pre-line" dir="auto">{ r.Comment }</p>
+				if r.Original != "" {
+					<p class="mt-1 text-xs break-words text-ink-soft" dir="auto">{ p.T(i18n.AdminReviewsOriginal, "text", r.Original) }</p>
+				}
+				if r.ReplyAr != "" || r.ReplyFr != "" {
+					<div class="mt-g1 rounded-field border-s-4 border-oil bg-sand/60 px-g2 py-g1 text-sm">
+						if r.ReplyAr != "" {
+							<p dir="rtl" class="break-words">{ r.ReplyAr }</p>
+						}
+						if r.ReplyFr != "" {
+							<p dir="ltr" class="break-words">{ r.ReplyFr }</p>
+						}
+					</div>
+				}
+				if r.Photo.Valid() {
+					<a href={ templ.SafeURL(r.Photo.Fallback) } target="_blank" rel="noopener" aria-label={ p.T(i18n.AdminReviewsPhoto) } class="mt-g2 inline-block overflow-hidden rounded-field ring-1 ring-sand-deep">
+						@Picture(r.Photo, "", "6rem", false, "block size-24", "size-24 object-cover")
+					</a>
+				}
+				if r.Status == "rejected" && r.Reason != "" {
+					<p class="mt-g1 text-sm break-words text-danger">{ p.T(i18n.AdminReviewsRejection, "reason", r.Reason) }</p>
+				}
+			</div>
+		</div>
+		<div class="mt-g2 grid grid-cols-2 gap-2 border-t border-sand-deep/50 pt-g2 sm:ms-9 sm:flex sm:flex-wrap sm:border-0 sm:pt-0">
+			if r.Status != "approved" {
+				<div class="col-span-2 sm:contents">
+					@reviewAction(p, d, r, "approve", "bg-oil text-olive-950 hover:bg-oil-bright") {
+						@IconCheck("")
+						{ p.T(i18n.AdminReviewsApprove) }
+					}
+				</div>
+			}
+			if r.Featured {
+				@reviewAction(p, d, r, "unpin", "border border-olive/30 text-olive hover:bg-olive/5") {
+					{ p.T(i18n.AdminReviewsUnfeatureShort) }
+				}
+			} else {
+				@reviewAction(p, d, r, "pin", "border border-olive/30 text-olive hover:bg-olive/5") {
+					{ p.T(i18n.AdminReviewsFeatureShort) }
+				}
+			}
+			if p.Owner {
+				<form method="post" action={ templ.SafeURL("/admin/reviews/" + r.ID + "/delete") } class="contents">
+					@csrfField(p)
+					<input type="hidden" name="return" value={ d.Return }/>
+					<input type="hidden" name="confirm" value="0" data-confirm-field/>
+					<button type="submit" data-confirm="confirm-review" class={ btn("md", "px-3", "whitespace-normal"), "inline-flex w-full min-w-0 border border-danger/40 leading-tight text-danger hover:bg-danger/5 sm:w-auto sm:px-5" }>
+						@IconTrash("")
+						{ p.T(i18n.AdminReviewsDeleteShort) }
+					</button>
+				</form>
+			}
+		</div>
+		if r.Status != "rejected" {
+			<details class="mt-g2 sm:ms-9">
+				<summary class="tap inline-flex cursor-pointer list-none items-center gap-1.5 rounded-full px-2 text-sm font-medium text-danger hover:bg-danger/5 [&::-webkit-details-marker]:hidden">
+					@IconX("size-4")
+					{ p.T(i18n.AdminReviewsReject) }
+				</summary>
+				<form method="post" action={ templ.SafeURL("/admin/reviews/" + r.ID + "/reject") } class="mt-g1 flex flex-wrap items-end gap-g1">
+					@csrfField(p)
+					<input type="hidden" name="return" value={ d.Return }/>
+					<div class="w-full min-w-0 sm:w-auto sm:min-w-[14rem] sm:flex-1">
+						<label for={ "reason-" + r.ID } class="mb-1 block text-sm font-medium text-olive">{ p.T(i18n.AdminReviewsRejectReason) }</label>
+						<input id={ "reason-" + r.ID } name="reason" maxlength="300" class="field-input min-h-11"/>
+					</div>
+					<button type="submit" class={ btn("md"), "inline-flex border border-danger/40 text-danger hover:bg-danger/5" }>{ p.T(i18n.AdminReviewsRejectShort) }</button>
+				</form>
+			</details>
+		}
+		<details class="mt-g1 sm:ms-9">
+			<summary class="tap inline-flex cursor-pointer list-none items-center gap-1.5 rounded-full px-2 text-sm font-medium text-olive hover:bg-sand [&::-webkit-details-marker]:hidden">
+				@IconPencil("size-4")
+				{ p.T(i18n.AdminReviewsEdit) }
+			</summary>
+			<form method="post" action={ templ.SafeURL("/admin/reviews/" + r.ID + "/edit") } class="mt-g2 grid gap-g2 sm:grid-cols-2">
+				@csrfField(p)
+				<input type="hidden" name="return" value={ d.Return }/>
+				<div class="sm:col-span-2">
+					<label for={ "comment-" + r.ID } class="mb-1 block text-sm font-medium text-olive">{ p.T(i18n.AdminReviewsComment) }</label>
+					<textarea id={ "comment-" + r.ID } name="comment" rows="3" minlength="10" maxlength="600" required dir="auto" class="field-input py-3">{ r.Comment }</textarea>
+				</div>
+				<div>
+					<label for={ "reply-ar-" + r.ID } class="mb-1 block text-sm font-medium text-olive">{ p.T(i18n.AdminReviewsReplyAr) }</label>
+					<textarea id={ "reply-ar-" + r.ID } name="replyAr" rows="2" maxlength="1000" dir="rtl" lang="ar" class="field-input py-3">{ r.ReplyAr }</textarea>
+				</div>
+				<div>
+					<label for={ "reply-fr-" + r.ID } class="mb-1 block text-sm font-medium text-olive">{ p.T(i18n.AdminReviewsReplyFr) }</label>
+					<textarea id={ "reply-fr-" + r.ID } name="replyFr" rows="2" maxlength="1000" dir="ltr" lang="fr" class="field-input py-3">{ r.ReplyFr }</textarea>
+				</div>
+				<div class="sm:col-span-2">
+					<button type="submit" class={ btn("md"), "inline-flex bg-olive text-limewash hover:bg-olive-hover" }>{ p.T(i18n.AdminReviewsSave) }</button>
+				</div>
+			</form>
+		</details>
+	</li>
+}
+
+func (p AdminPage) reviewStatusLabel(s string) string {
+	switch s {
+	case "pending":
+		return p.T(i18n.AdminReviewsPending)
+	case "approved":
+		return p.T(i18n.AdminReviewsApproved)
+	}
+	return p.T(i18n.AdminReviewsRejected)
+}

@@ -1,0 +1,413 @@
+package view
+
+import (
+	"strconv"
+
+	"github.com/omarchaouki/zaytona-go/internal/i18n"
+)
+
+const filterSelect = "field-input min-h-11 w-full"
+
+// AdminOrders is the orders list. Filters are a GET form, bulk actions a POST
+// form (checkboxes join it through form="bulk"); both work without JS.
+templ AdminOrders(p AdminPage, d OrdersData) {
+	@AdminShell(p) {
+		<div>
+			<div class="flex flex-wrap items-end justify-between gap-3">
+				<div>
+					<h1 class="text-h2">{ p.T(i18n.AdminOrdersTitle) }</h1>
+					<p class="mt-1 text-sm text-ink-soft">{ p.T(i18n.AdminOrdersCount, "count", p.num(d.Total)) }</p>
+				</div>
+				<div class="flex flex-wrap gap-2">
+					if d.Unseen > 0 {
+						<form method="post" action="/admin/orders/seen-all">
+							@csrfField(p)
+							<input type="hidden" name="return" value={ d.returnPath() }/>
+							<button type="submit" class={ btn("md", "whitespace-normal"), "inline-flex border border-danger/40 text-danger hover:bg-danger/5" }>
+								@IconCheckCheck("")
+								{ p.T(i18n.AdminOrdersMarkAllSeen) } ({ p.num(d.Unseen) })
+							</button>
+						</form>
+					}
+					<a href={ templ.SafeURL(d.csvHref()) } download class={ btn("md"), "inline-flex border border-olive/30 text-olive hover:bg-olive/5" }>
+						@IconDownload("")
+						{ p.T(i18n.AdminOrdersExport) }
+					</a>
+				</div>
+			</div>
+			@ordersFilters(p, d)
+			if len(d.Undo) > 0 && p.Owner {
+				<form method="post" action="/admin/orders/restore" role="status" class="mt-3 flex flex-wrap items-center gap-x-3 text-sm font-medium text-olive-600">
+					@csrfField(p)
+					<input type="hidden" name="ids" value={ joinIDs(d.Undo) }/>
+					<input type="hidden" name="return" value={ d.UndoReturn }/>
+					{ p.T(i18n.AdminOrdersDeleted, "count", strconv.Itoa(len(d.Undo))) }
+					<button type="submit" class="tap inline-flex items-center gap-1.5 rounded-full px-3 font-bold text-olive underline decoration-oil decoration-2 underline-offset-4 hover:bg-sand">
+						@IconUndo("size-4")
+						{ p.T(i18n.AdminOrdersUndo) }
+					</button>
+				</form>
+			}
+			@ordersBulk(p, d)
+			@ordersCards(p, d)
+			@ordersTable(p, d)
+			@ordersPagination(p, d)
+			if p.Owner {
+				@ConfirmDeleteDialog(p, "confirm-delete")
+			}
+		</div>
+	}
+}
+
+templ ordersFilters(p AdminPage, d OrdersData) {
+	<form id="orders-filter" method="get" action="/admin/orders" class="mt-5 rounded-card bg-white p-4 shadow-lift ring-1 ring-sand-deep/50">
+		if d.Filters.Sort != "" {
+			<input type="hidden" name="sort" value={ d.Filters.Sort }/>
+			<input type="hidden" name="dir" value={ d.Filters.Dir }/>
+		}
+		<div class="flex gap-2">
+			<label class="relative block min-w-0 flex-1">
+				<span class="sr-only">{ p.T(i18n.AdminOrdersSearchLabel) }</span>
+				@IconSearch("pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-ink-soft")
+				<input type="search" name="q" value={ d.Filters.Q } maxlength="100" placeholder={ p.T(i18n.AdminOrdersSearch) } class="field-input min-h-11 ps-9"/>
+			</label>
+			<button type="submit" class={ btn("md", "px-4"), "inline-flex shrink-0 bg-olive text-limewash hover:bg-olive-hover" }>
+				@IconSearch("")
+				<span class="sr-only sm:not-sr-only">{ p.T(i18n.AdminOrdersFilter) }</span>
+			</button>
+		</div>
+		<details class="group mt-3" open?={ d.Filters.ActiveCount() > 0 }>
+			<summary class="tap inline-flex cursor-pointer list-none items-center gap-1.5 rounded-field px-1 text-sm font-medium text-olive [&::-webkit-details-marker]:hidden">
+				@IconFilter("size-4")
+				{ p.T(i18n.AdminOrdersFilters) }
+				if n := d.Filters.ActiveCount(); n > 0 {
+					<span class="inline-flex size-5 items-center justify-center rounded-full bg-oil text-xs font-bold text-olive-950">{ strconv.Itoa(n) }</span>
+				}
+				@IconChevronDown("size-4 transition-transform group-open:rotate-180")
+			</summary>
+			<div class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+				<label class="block">
+					<span class="mb-1 block text-xs font-medium text-ink-soft">{ p.T(i18n.AdminOrdersStatusFilter) }</span>
+					<select name="status" data-autosubmit class={ filterSelect }>
+						<option value="">{ p.T(i18n.AdminOrdersAll) }</option>
+						for _, s := range OrderStatuses {
+							<option value={ s } selected?={ d.Filters.Status == s }>{ p.statusLabel(s) }</option>
+						}
+					</select>
+				</label>
+				<label class="block">
+					<span class="mb-1 block text-xs font-medium text-ink-soft">{ p.T(i18n.AdminOrdersPaidFilter) }</span>
+					<select name="paid" data-autosubmit class={ filterSelect }>
+						<option value="">{ p.T(i18n.AdminOrdersAll) }</option>
+						<option value="paid" selected?={ d.Filters.Paid == "paid" }>{ p.T(i18n.AdminOrdersPaid) }</option>
+						<option value="unpaid" selected?={ d.Filters.Paid == "unpaid" }>{ p.T(i18n.AdminOrdersUnpaid) }</option>
+						<option value="unseen" selected?={ d.Filters.Unseen }>{ p.T(i18n.AdminOrdersUnseenOnly) }</option>
+					</select>
+				</label>
+				<label class="block">
+					<span class="mb-1 block text-xs font-medium text-ink-soft">{ p.T(i18n.AdminOrdersProductFilter) }</span>
+					<select name="offer" data-autosubmit class={ filterSelect }>
+						<option value="">{ p.T(i18n.AdminOrdersAll) }</option>
+						for _, o := range d.Offers {
+							<option value={ o.Value } selected?={ d.Filters.Offer == o.Value }>{ o.Label }</option>
+						}
+					</select>
+				</label>
+				<label class="block">
+					<span class="mb-1 block text-xs font-medium text-ink-soft">{ p.T(i18n.AdminOrdersCity) }</span>
+					<input name="city" value={ d.Filters.City } maxlength="80" class="field-input min-h-11"/>
+				</label>
+				<label class="block">
+					<span class="mb-1 block text-xs font-medium text-ink-soft">{ p.T(i18n.AdminOrdersFrom) }</span>
+					<input type="date" name="from" value={ d.Filters.From } class="field-input min-h-11"/>
+				</label>
+				<label class="block">
+					<span class="mb-1 block text-xs font-medium text-ink-soft">{ p.T(i18n.AdminOrdersTo) }</span>
+					<input type="date" name="to" value={ d.Filters.To } class="field-input min-h-11"/>
+				</label>
+			</div>
+			<div class="mt-3 flex flex-wrap items-center justify-between gap-2">
+				<a href="/admin/orders" class="tap inline-flex items-center gap-1.5 rounded-full px-3 text-sm text-ink-soft hover:bg-sand">
+					@IconX("size-4")
+					{ p.T(i18n.AdminOrdersReset) }
+				</a>
+				<button type="submit" class={ btn("md"), "inline-flex bg-olive text-limewash hover:bg-olive-hover" }>{ p.T(i18n.AdminOrdersFilter) }</button>
+			</div>
+		</details>
+	</form>
+}
+
+// ordersBulk acts on the checked rows. With JS it shows only when rows are checked.
+templ ordersBulk(p AdminPage, d OrdersData) {
+	if len(d.Rows) > 0 {
+		<form id="bulk" method="post" action="/admin/orders/bulk" data-bulk class="sticky top-14 z-20 mt-4 flex flex-wrap items-center gap-3 rounded-card bg-olive-950 px-4 py-3 text-limewash shadow-lift lg:top-2">
+			@csrfField(p)
+			<input type="hidden" name="return" value={ d.returnPath() }/>
+			<input type="hidden" name="confirm" value="0" data-confirm-field/>
+			<span class="font-bold" data-bulk-count data-template={ p.T(i18n.AdminOrdersSelected, "count", "{count}") }>{ p.T(i18n.AdminOrdersSelected, "count", "0") }</span>
+			<label class="flex items-center gap-2 text-sm">
+				{ p.T(i18n.AdminOrdersBulkStatus) }
+				<select name="status" class="field-input min-h-11 w-auto text-ink">
+					for _, s := range OrderStatuses {
+						<option value={ s } selected?={ s == "confirmed" }>{ p.statusLabel(s) }</option>
+					}
+				</select>
+			</label>
+			<button type="submit" name="action" value="status" class={ btn("md"), "inline-flex bg-oil text-olive-950 hover:bg-oil-bright" }>{ p.T(i18n.AdminOrdersApply) }</button>
+			<button type="submit" name="action" value="paid" class={ btn("md", "whitespace-normal"), "inline-flex border border-olive-400/60 text-limewash hover:bg-olive-600" }>
+				@IconBadgeCheck("")
+				{ p.T(i18n.AdminOrdersMarkPaid) }
+			</button>
+			<button type="submit" name="action" value="unpaid" class={ btn("md", "whitespace-normal"), "inline-flex text-limewash/80 hover:bg-limewash/10 hover:text-limewash" }>{ p.T(i18n.AdminOrdersMarkUnpaid) }</button>
+			if p.Owner {
+				<button type="submit" name="action" value="delete" data-confirm="confirm-delete" class={ btn("md"), "inline-flex border border-danger/60 text-limewash hover:bg-danger hover:text-white sm:ms-auto" }>
+					@IconTrash("")
+					{ p.T(i18n.AdminOrdersDelete) }
+				</button>
+			}
+		</form>
+	}
+}
+
+templ rowCheckbox(p AdminPage, o OrderRow, class string) {
+	<label class={ "tap inline-flex cursor-pointer items-center justify-center", class }>
+		<input type="checkbox" form="bulk" name="ids" value={ o.ID } data-select-row class="size-5 accent-olive" aria-label={ p.T(i18n.AdminOrdersSelectRow, "reference", o.Reference) }/>
+	</label>
+}
+
+templ rowDelete(p AdminPage, d OrdersData, o OrderRow, class string) {
+	<form method="post" action={ templ.SafeURL("/admin/orders/" + o.ID + "/delete") } class={ class }>
+		@csrfField(p)
+		<input type="hidden" name="return" value={ d.returnPath() }/>
+		<input type="hidden" name="confirm" value="0" data-confirm-field/>
+		<button type="submit" data-confirm="confirm-delete" data-confirm-count="1" aria-label={ p.T(i18n.AdminOrdersDeleteRow, "reference", o.Reference) } title={ p.T(i18n.AdminOrdersDeleteRow, "reference", o.Reference) } class="tap inline-flex shrink-0 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-danger/10 hover:text-danger">
+			@IconTrash("size-5")
+		</button>
+	</form>
+}
+
+// ordersCards: phones and tablets, one card per order (no sideways scrolling).
+templ ordersCards(p AdminPage, d OrdersData) {
+	<ul class="mt-4 grid grid-cols-1 gap-g1 md:grid-cols-2 xl:hidden" data-orders data-size={ strconv.Itoa(d.PageSize) }>
+		if len(d.Rows) == 0 {
+			<li class="rounded-card bg-white px-4 py-10 text-center text-ink-soft md:col-span-2">{ p.T(i18n.AdminOrdersEmpty) }</li>
+		}
+		for _, o := range d.Rows {
+			<li class={ "relative rounded-card bg-white p-g2 shadow-lift ring-1 ring-sand-deep/50", templ.KV("border-s-4 border-s-oil", o.Status == "new" && o.Seen), templ.KV("border-s-4 border-s-danger bg-danger/[0.06] ring-danger/40", !o.Seen) }>
+				<div class="flex items-start gap-3">
+					@rowCheckbox(p, o, "relative z-10 -m-2.5 shrink-0")
+					<div class="min-w-0 flex-1">
+						<div class="flex flex-wrap items-center justify-between gap-x-2">
+							<span class="flex min-w-0 items-center gap-2">
+								<a href={ templ.SafeURL("/admin/orders/" + o.ID) } dir="ltr" class="inline-flex min-h-11 items-center font-bold text-olive after:absolute after:inset-0 after:content-['']">{ o.Reference }</a>
+								if !o.Seen {
+									@NewBadge(p)
+								}
+							</span>
+							<span class="text-xs text-ink-soft tabular-nums" dir="ltr">{ dateShort(o.CreatedAt) }</span>
+						</div>
+						<p class="mt-1 truncate font-medium"><bdi>{ o.Customer }</bdi> · <span class="text-ink-soft">{ o.City }</span></p>
+						<div class="mt-2 flex flex-wrap items-center gap-2">
+							<span class="font-bold tabular-nums">{ p.mad(o.Total) }</span>
+							@StatusBadge(p, o.Status)
+							@PaidBadge(p, o.Paid)
+						</div>
+					</div>
+					if p.Owner {
+						@rowDelete(p, d, o, "relative z-10 self-end")
+					}
+				</div>
+			</li>
+		}
+	</ul>
+}
+
+templ sortHeader(p AdminPage, d OrdersData, key string, label i18n.Key) {
+	<a href={ templ.SafeURL(d.sortHref(key)) } aria-label={ p.T(i18n.AdminOrdersSortBy, "column", p.T(label)) } class="inline-flex min-h-11 items-center gap-1 font-bold hover:text-olive">
+		{ p.T(label) }
+		if d.sortKey() == key {
+			<span aria-hidden="true">
+				if d.sortDir() == "asc" {
+					↑
+				} else {
+					↓
+				}
+			</span>
+		}
+	</a>
+}
+
+// ordersTable: wide screens, the full table.
+templ ordersTable(p AdminPage, d OrdersData) {
+	<div class="relative mt-4 hidden overflow-x-auto rounded-card bg-white shadow-lift ring-1 ring-sand-deep/50 xl:block">
+		<table class="w-full text-start text-sm">
+			<thead class="bg-sand/60 text-xs text-ink-soft">
+				<tr>
+					<th scope="col" class="px-3 py-3 text-start">
+						<label class="tap -m-3 inline-flex cursor-pointer items-center justify-center">
+							<input type="checkbox" data-select-all hidden class="size-4 accent-olive" aria-label={ p.T(i18n.AdminOrdersSelectAll) }/>
+						</label>
+					</th>
+					<th scope="col" class="px-3 py-3 text-start font-bold">{ p.T(i18n.AdminOrdersColReference) }</th>
+					<th scope="col" class="px-3 py-3 text-start font-bold">{ p.T(i18n.AdminOrdersColPaid) }</th>
+					<th scope="col" class="px-3 py-3 text-start">
+						@sortHeader(p, d, "created", i18n.AdminOrdersColDate)
+					</th>
+					<th scope="col" class="px-3 py-3 text-start">
+						@sortHeader(p, d, "name", i18n.AdminOrdersColCustomer)
+					</th>
+					<th scope="col" class="px-3 py-3 text-start">
+						@sortHeader(p, d, "city", i18n.AdminOrdersColCity)
+					</th>
+					<th scope="col" class="px-3 py-3 text-start">
+						@sortHeader(p, d, "total", i18n.AdminOrdersColTotal)
+					</th>
+					<th scope="col" class="px-3 py-3 text-start">
+						@sortHeader(p, d, "status", i18n.AdminOrdersColStatus)
+					</th>
+					if p.Owner {
+						<th scope="col" class="px-3 py-3"><span class="sr-only">{ p.T(i18n.AdminOrdersDelete) }</span></th>
+					}
+				</tr>
+			</thead>
+			<tbody class="divide-y divide-sand-deep/50">
+				if len(d.Rows) == 0 {
+					<tr>
+						<td colspan="9" class="px-4 py-10 text-center text-ink-soft">{ p.T(i18n.AdminOrdersEmpty) }</td>
+					</tr>
+				}
+				for _, o := range d.Rows {
+					<tr class={ "align-middle hover:bg-sand/30", templ.KV("border-s-4 border-s-oil", o.Status == "new" && o.Seen), templ.KV("border-s-4 border-s-danger bg-danger/[0.06]", !o.Seen) }>
+						<td class="px-3 py-3">
+							@rowCheckbox(p, o, "-m-3")
+						</td>
+						<td class="px-3 py-3">
+							<span class="flex items-center gap-2">
+								<a href={ templ.SafeURL("/admin/orders/" + o.ID) } dir="ltr" class="inline-flex min-h-11 items-center font-bold whitespace-nowrap text-olive underline-offset-4 hover:underline">{ o.Reference }</a>
+								if !o.Seen {
+									@NewBadge(p)
+								}
+							</span>
+						</td>
+						<td class="px-3 py-3">
+							@PaidBadge(p, o.Paid)
+						</td>
+						<td class="px-3 py-3"><span class="whitespace-nowrap text-ink-soft tabular-nums" dir="ltr">{ dateShort(o.CreatedAt) }</span></td>
+						<td class="px-3 py-3">
+							<div class="min-w-[9rem]">
+								<p class="font-medium"><bdi>{ o.Customer }</bdi></p>
+								<p class="text-xs text-ink-soft tabular-nums" dir="ltr">{ phoneDisplay(o.Phone) }</p>
+							</div>
+						</td>
+						<td class="px-3 py-3">{ o.City }</td>
+						<td class="px-3 py-3">
+							<div class="whitespace-nowrap">
+								<p class="font-medium tabular-nums">{ p.mad(o.Total) }</p>
+								<p class="text-xs text-ink-soft">{ p.T(i18n.AdminOrdersItems, "count", strconv.Itoa(int(o.Items))) }</p>
+							</div>
+						</td>
+						<td class="px-3 py-3">
+							@StatusBadge(p, o.Status)
+						</td>
+						if p.Owner {
+							<td class="px-3 py-3">
+								@rowDelete(p, d, o, "")
+							</td>
+						}
+					</tr>
+				}
+			</tbody>
+		</table>
+	</div>
+}
+
+templ ordersPagination(p AdminPage, d OrdersData) {
+	<nav aria-label={ p.T(i18n.AdminOrdersPagination) } class="mt-4 flex flex-col gap-3 rounded-card bg-white p-3 ring-1 ring-sand-deep/50 sm:flex-row sm:items-center sm:justify-between">
+		<div class="flex flex-wrap items-center justify-between gap-3 sm:justify-start">
+			<label class="inline-flex items-center gap-2 text-sm font-medium whitespace-nowrap text-ink">
+				{ p.T(i18n.AdminOrdersPerPage) }
+				<select name="size" form="orders-filter" data-page-size class="field-input min-h-11 w-[5.5rem] tabular-nums">
+					for _, n := range PageSizes {
+						<option value={ strconv.Itoa(n) } selected?={ d.PageSize == n }>{ strconv.Itoa(n) }</option>
+					}
+				</select>
+			</label>
+			<span class="text-sm whitespace-nowrap text-ink-soft tabular-nums">
+				<bdi dir="ltr">{ d.rangeText() }</bdi> { p.T(i18n.AdminOrdersOfTotal, "total", p.num(d.Total)) }
+			</span>
+		</div>
+		<div class="flex items-center justify-between gap-2">
+			if d.Page > 1 {
+				<a href={ templ.SafeURL(d.pageHref(d.Page - 1)) } rel="prev" aria-label={ p.T(i18n.AdminOrdersPrev) } class={ btn("md", "px-3"), "inline-flex border border-olive/30 text-olive hover:bg-olive/5 sm:px-5" }>
+					@IconChevronPrev("")
+					<span class="hidden sm:inline">{ p.T(i18n.AdminOrdersPrev) }</span>
+				</a>
+			} else {
+				<span aria-hidden="true" class={ btn("md", "px-3"), "inline-flex border border-sand-deep text-ink-soft/50 sm:px-5" }>
+					@IconChevronPrev("")
+					<span class="hidden sm:inline">{ p.T(i18n.AdminOrdersPrev) }</span>
+				</span>
+			}
+			<span class="px-1 text-sm text-ink-soft tabular-nums">{ p.T(i18n.AdminOrdersPageOf, "page", strconv.Itoa(d.Page), "pages", strconv.Itoa(d.pages())) }</span>
+			if d.Page < d.pages() {
+				<a href={ templ.SafeURL(d.pageHref(d.Page + 1)) } rel="next" aria-label={ p.T(i18n.AdminOrdersNext) } class={ btn("md", "px-3"), "inline-flex border border-olive/30 text-olive hover:bg-olive/5 sm:px-5" }>
+					<span class="hidden sm:inline">{ p.T(i18n.AdminOrdersNext) }</span>
+					@IconChevronNext("")
+				</a>
+			} else {
+				<span aria-hidden="true" class={ btn("md", "px-3"), "inline-flex border border-sand-deep text-ink-soft/50 sm:px-5" }>
+					<span class="hidden sm:inline">{ p.T(i18n.AdminOrdersNext) }</span>
+					@IconChevronNext("")
+				</span>
+			}
+		</div>
+	</nav>
+}
+
+// ConfirmDeleteDialog asks before deleting (JS). Bottom sheet on phones,
+// centred from tablets; focus starts on Cancel.
+templ ConfirmDeleteDialog(p AdminPage, id string) {
+	<dialog id={ id } aria-labelledby={ id + "-title" } class="fixed inset-x-0 top-auto bottom-0 m-0 w-full max-w-none rounded-t-[24px] bg-limewash p-g3 pb-[calc(1.618rem+env(safe-area-inset-bottom))] shadow-lift backdrop:bg-ink/60 backdrop:backdrop-blur-sm sm:inset-0 sm:m-auto sm:h-fit sm:max-w-[28rem] sm:rounded-[24px]">
+		<span class="flex size-12 items-center justify-center rounded-full bg-danger/10 text-danger">
+			@IconTrash("size-6")
+		</span>
+		<h2 id={ id + "-title" } class="mt-g2 font-display text-h3 text-olive" data-confirm-title data-template={ p.T(i18n.AdminOrdersDeleteTitle, "count", "{count}") }>{ p.T(i18n.AdminOrdersDeleteTitle, "count", "1") }</h2>
+		<p class="mt-g1 text-sm text-ink-soft">{ p.T(i18n.AdminOrdersDeleteBody) }</p>
+		<div class="mt-g3 flex flex-col-reverse gap-g1 sm:flex-row sm:justify-end">
+			<form method="dialog">
+				<button autofocus class={ btn("md"), "inline-flex w-full border border-olive/30 text-olive hover:bg-olive/5" }>{ p.T(i18n.AdminOrdersCancel) }</button>
+			</form>
+			<button type="button" data-confirm-yes data-busy-label={ p.T(i18n.AdminOrdersDeleting) } class={ btn("md"), "inline-flex bg-danger text-white hover:bg-danger/90" }>
+				@IconTrash("")
+				{ p.T(i18n.AdminOrdersDeleteConfirm) }
+			</button>
+		</div>
+	</dialog>
+}
+
+// AdminConfirmDelete is the confirmation page used without JS.
+templ AdminConfirmDelete(p AdminPage, ids []string, back string) {
+	@AdminShell(p) {
+		<form method="post" action="/admin/orders/bulk" class="max-w-md rounded-card bg-white p-g3 shadow-lift">
+			@csrfField(p)
+			<input type="hidden" name="action" value="delete"/>
+			<input type="hidden" name="confirm" value="1"/>
+			<input type="hidden" name="return" value={ back }/>
+			for _, id := range ids {
+				<input type="hidden" name="ids" value={ id }/>
+			}
+			<span class="flex size-12 items-center justify-center rounded-full bg-danger/10 text-danger">
+				@IconTrash("size-6")
+			</span>
+			<h1 class="mt-g2 font-display text-h3 text-olive">{ p.T(i18n.AdminOrdersDeleteTitle, "count", strconv.Itoa(len(ids))) }</h1>
+			<p class="mt-g1 text-sm text-ink-soft">{ p.T(i18n.AdminOrdersDeleteBody) }</p>
+			<div class="mt-g3 flex flex-col-reverse gap-g1 sm:flex-row sm:justify-end">
+				<a href={ templ.SafeURL(back) } class={ btn("md"), "inline-flex border border-olive/30 text-olive hover:bg-olive/5" }>{ p.T(i18n.AdminOrdersCancel) }</a>
+				<button type="submit" class={ btn("md"), "inline-flex bg-danger text-white hover:bg-danger/90" }>
+					@IconTrash("")
+					{ p.T(i18n.AdminOrdersDeleteConfirm) }
+				</button>
+			</div>
+		</form>
+	}
+}

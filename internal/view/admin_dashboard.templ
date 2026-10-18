@@ -1,0 +1,194 @@
+package view
+
+import (
+	"strconv"
+
+	"github.com/omarchaouki/zaytona-go/internal/i18n"
+)
+
+templ StatusBadge(p AdminPage, status string) {
+	<span class={ "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold whitespace-nowrap", statusStyle[status] }>
+		{ p.statusLabel(status) }
+	</span>
+}
+
+templ PaidBadge(p AdminPage, paid bool) {
+	if paid {
+		<span class="inline-flex items-center gap-1 rounded-full bg-olive-600/15 px-2.5 py-0.5 text-xs font-bold whitespace-nowrap text-olive-700">
+			@IconBadgeCheck("size-3.5")
+			{ p.T(i18n.AdminOrdersPaid) }
+		</span>
+	} else {
+		<span class="inline-flex items-center gap-1 rounded-full border border-sand-deep px-2.5 py-0.5 text-xs font-bold whitespace-nowrap text-ink-soft">
+			{ p.T(i18n.AdminOrdersUnpaid) }
+		</span>
+	}
+}
+
+templ NewBadge(p AdminPage) {
+	<span class="notify-pulse inline-flex items-center rounded-full bg-danger px-2 py-0.5 text-xs font-bold whitespace-nowrap text-white">
+		{ p.T(i18n.AdminOrdersNewBadge) }
+	</span>
+}
+
+// Dashboard, in the order the cooperative looks at things: money, what needs
+// doing, setup reminders, the 30-day chart, the latest orders. Every number
+// that maps to a list opens the orders filtered to it.
+templ AdminDashboard(p AdminPage, d DashboardData) {
+	@AdminShell(p) {
+		<div class="space-y-g3 lg:space-y-g4" data-autorefresh="30">
+			<header>
+				<h1 class="text-h2">{ p.T(i18n.AdminDashboardTitle) }</h1>
+				<p class="mt-0.5 flex items-center gap-1.5 text-sm text-ink-soft">
+					<span class="notify-pulse size-2 rounded-full bg-olive-600" aria-hidden="true"></span>
+					{ p.T(i18n.AdminDashboardAutoRefresh) }
+				</p>
+			</header>
+			<div class="grid gap-g3 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:items-start [&>*]:min-w-0">
+				<section aria-labelledby="money-title" class="overflow-hidden rounded-[20px] bg-olive-950 text-limewash shadow-lift">
+					<a href="/admin/orders?paid=paid" class="block px-g3 pt-g3 pb-g2 transition-colors hover:bg-limewash/[0.04]">
+						<p id="money-title" class="flex items-center gap-2 text-sm text-limewash/75">
+							@IconWallet("size-4 text-oil-bright")
+							{ p.T(i18n.AdminDashboardPaidTotal) }
+						</p>
+						<p class="mt-1 font-display text-[2.25rem] leading-tight font-bold break-words text-oil-bright tabular-nums">{ p.mad(d.Paid) }</p>
+						<p class="text-sm text-limewash/70">{ p.T(i18n.AdminDashboardPaidCount, "count", p.num(d.PaidCount)) }</p>
+					</a>
+					<div class="grid grid-cols-2 divide-x divide-limewash/10 border-t border-limewash/10 rtl:divide-x-reverse">
+						@moneyCell(p, "/admin/orders?paid=paid", i18n.AdminDashboardPaidMonth, p.mad(d.PaidMonth), p.T(i18n.AdminDashboardOrdersCount, "count", p.num(d.PaidMonthCount)), false)
+						@moneyCell(p, "/admin/orders?status=delivered&paid=unpaid", i18n.AdminDashboardUnpaidDelivered, p.mad(d.UnpaidDelivered), p.T(i18n.AdminDashboardOrdersCount, "count", p.num(d.UnpaidDeliveredCount)), d.UnpaidDeliveredCount > 0)
+					</div>
+				</section>
+				<section aria-label={ p.T(i18n.AdminDashboardTitle) }>
+					<ul class="grid grid-cols-2 gap-g1 sm:gap-g2">
+						@stat(p, "/admin/orders?status=new", IconClock("size-4 shrink-0"), p.T(i18n.AdminDashboardPending), p.num(d.Pending), "", d.Pending > 0)
+						@stat(p, "/admin/orders?status=confirmed", IconTruck("size-4 shrink-0"), p.T(i18n.AdminDashboardToDeliver), p.num(d.ToDeliver), p.mad(d.ToCollect), false)
+						@stat(p, "", IconPackage("size-4 shrink-0"), p.T(i18n.AdminDashboardToday), p.num(d.Today), "", false)
+						@stat(p, "/admin/orders?status=delivered", IconPackageCheck("size-4 shrink-0"), p.T(i18n.AdminDashboardDelivered), p.num(d.Delivered), "", false)
+						@stat(p, "", IconPackage("size-4 shrink-0"), p.T(i18n.AdminDashboardTotal), p.num(d.Total), "", false)
+						@stat(p, "", IconMessageCircle("size-4 shrink-0"), p.T(i18n.AdminDashboardWhatsappClicks), p.num(d.WhatsAppClicks30), "", false)
+						@stat(p, "/admin/reviews?status=pending", IconStar("size-4 shrink-0"), p.T(i18n.AdminDashboardPendingReviews), p.num(p.PendingReviews), "", p.PendingReviews > 0)
+					</ul>
+				</section>
+			</div>
+			if len(d.Warnings) > 0 {
+				<details class="group rounded-card border border-oil/60 bg-oil-soft/50 text-sm">
+					<summary class="tap flex cursor-pointer list-none items-center gap-2 px-g2 font-bold text-oil-deep [&::-webkit-details-marker]:hidden">
+						@IconAlertTriangle("size-4 shrink-0")
+						{ p.T(i18n.AdminDashboardWarningsTitle, "count", strconv.Itoa(len(d.Warnings))) }
+						@IconChevronDown("ms-auto size-4 transition-transform group-open:rotate-180")
+					</summary>
+					<ul class="space-y-2 px-g2 pb-g2 text-ink">
+						for _, w := range d.Warnings {
+							<li class="flex gap-2">
+								<span class="mt-2 size-1.5 shrink-0 rounded-full bg-oil-deep" aria-hidden="true"></span>
+								{ w }
+							</li>
+						}
+						<li class="text-xs text-ink-soft">{ p.T(i18n.AdminDashboardSettingsSoon) }</li>
+					</ul>
+				</details>
+			}
+			<div class="grid gap-g3 lg:grid-cols-2 lg:items-start [&>*]:min-w-0">
+				@chart(p, d.Days)
+				<section aria-labelledby="latest-title">
+					<div class="flex items-center justify-between">
+						<h2 id="latest-title" class="text-h3">{ p.T(i18n.AdminDashboardLatest) }</h2>
+						<a href="/admin/orders" class="tap inline-flex items-center px-1 text-sm font-medium text-olive underline underline-offset-4">{ p.T(i18n.AdminDashboardSeeAll) }</a>
+					</div>
+					if len(d.Latest) == 0 {
+						<p class="mt-g1 rounded-card bg-white p-g3 text-ink-soft">{ p.T(i18n.AdminDashboardEmpty) }</p>
+					} else {
+						<ul class="mt-g1 divide-y divide-sand-deep/60 overflow-hidden rounded-card bg-white shadow-lift ring-1 ring-sand-deep/50">
+							for _, o := range d.Latest {
+								<li>
+									<a href={ templ.SafeURL("/admin/orders/" + o.ID) } class={ "flex items-center gap-g1 px-g2 py-3 transition-colors hover:bg-sand/40 active:bg-sand/60", templ.KV("border-s-4 border-s-danger bg-danger/[0.06]", !o.Seen) }>
+										<div class="min-w-0 flex-1">
+											<div class="flex items-center justify-between gap-2">
+												<span class="truncate font-bold text-ink"><bdi>{ o.Customer }</bdi></span>
+												<span class="shrink-0 font-bold text-olive tabular-nums">{ p.mad(o.Total) }</span>
+											</div>
+											<div class="mt-0.5 flex items-center justify-between gap-2 text-sm text-ink-soft">
+												<span class="min-w-0 truncate"><span dir="ltr" class="tabular-nums">{ o.Reference }</span> · { o.City }</span>
+												@StatusBadge(p, o.Status)
+											</div>
+											<p class="mt-0.5 text-xs text-ink-soft tabular-nums">{ p.dateTime(o.CreatedAt) }</p>
+										</div>
+										@IconChevronNext("size-4 shrink-0 text-ink-soft")
+									</a>
+								</li>
+							}
+						</ul>
+					}
+				</section>
+			</div>
+		</div>
+	}
+}
+
+templ moneyCell(p AdminPage, href string, label i18n.Key, amount, sub string, warn bool) {
+	<a href={ templ.SafeURL(href) } class={ "block min-w-0 px-g2 py-g2 transition-colors hover:bg-limewash/[0.04] sm:px-g3", templ.KV("bg-oil/15", warn) }>
+		<p class="flex items-start gap-1.5 text-xs leading-snug text-limewash/70">
+			if warn {
+				@IconAlertTriangle("mt-px size-3.5 shrink-0 text-oil-bright")
+			} else {
+				@IconBadgeCheck("mt-px size-3.5 shrink-0 text-olive-400")
+			}
+			{ p.T(label) }
+		</p>
+		<p class="mt-1 text-lg leading-tight font-bold break-words text-limewash tabular-nums sm:text-xl">{ amount }</p>
+		<p class="text-xs text-limewash/60">{ sub }</p>
+	</a>
+}
+
+templ stat(p AdminPage, href string, icon templ.Component, label, value, sub string, highlight bool) {
+	<li>
+		if href != "" {
+			<a href={ templ.SafeURL(href) } class={ "flex h-full flex-col rounded-card bg-white p-g2 shadow-lift ring-1 ring-sand-deep/50 transition-transform hover:-translate-y-0.5 active:scale-[0.98]", templ.KV("ring-2 ring-danger/50", highlight) }>
+				@statBody(icon, label, value, sub, highlight)
+			</a>
+		} else {
+			<div class="flex h-full flex-col rounded-card bg-white p-g2 shadow-lift ring-1 ring-sand-deep/50">
+				@statBody(icon, label, value, sub, highlight)
+			</div>
+		}
+	</li>
+}
+
+templ statBody(icon templ.Component, label, value, sub string, highlight bool) {
+	<span class="flex items-start justify-between gap-2">
+		<span class="text-sm leading-snug text-ink-soft">{ label }</span>
+		<span class={ templ.KV("text-danger", highlight), templ.KV("text-olive-600", !highlight) }>
+			@icon
+		</span>
+	</span>
+	<span class={ "mt-1 block font-display text-[1.75rem] leading-none font-bold tabular-nums", templ.KV("text-danger", highlight), templ.KV("text-olive", !highlight) }>{ value }</span>
+	if sub != "" {
+		<span class="mt-1 block text-xs break-words text-oil-deep tabular-nums">{ sub }</span>
+	}
+}
+
+// chart is the 30-day orders chart as inline SVG (no style attributes: bar
+// sizes are SVG geometry). Bars read left to right (oldest to today) in both
+// languages, like a calendar.
+templ chart(p AdminPage, days []ChartDay) {
+	<section aria-labelledby="chart-title" class="rounded-card bg-white p-g2 shadow-lift ring-1 ring-sand-deep/50 sm:p-g3">
+		<div class="flex items-baseline justify-between gap-2">
+			<h2 id="chart-title" class="text-h3">{ p.T(i18n.AdminDashboardChartTitle) }</h2>
+			<span class="text-sm font-bold text-olive tabular-nums">{ p.T(i18n.AdminDashboardOrdersCount, "count", p.num(chartTotal(days))) }</span>
+		</div>
+		<svg viewBox="0 0 300 100" preserveAspectRatio="none" role="img" aria-labelledby="chart-title" class="mt-g2 block h-28 w-full sm:h-36" dir="ltr">
+			for _, b := range p.chartBars(days) {
+				<rect x={ b.X } y={ b.Y } width={ b.W } height={ b.H } rx="0.6" class={ templ.KV("fill-sand", b.Empty), templ.KV("fill-olive-600 hover:fill-oil", !b.Empty) }>
+					<title>{ b.Label }</title>
+				</rect>
+			}
+		</svg>
+		if len(days) > 0 {
+			<div class="mt-1.5 flex justify-between text-xs text-ink-soft tabular-nums" dir="ltr">
+				<span>{ days[0].Day.Format("02/01") }</span>
+				<span>{ days[len(days)-1].Day.Format("02/01") }</span>
+			</div>
+		}
+	</section>
+}

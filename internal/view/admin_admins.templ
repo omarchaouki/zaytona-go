@@ -1,0 +1,267 @@
+package view
+
+import (
+	"strconv"
+	"time"
+
+	"github.com/omarchaouki/zaytona-go/internal/i18n"
+)
+
+// AdminsData fills Admin > Administrators (owner only).
+type AdminsData struct {
+	Admins      []AdminRow
+	SelfID      string
+	Form        *FormState
+	NeedsReauth bool
+	ReauthError string
+	// TempPassword is shown once, right after it was generated.
+	TempPassword string
+	TempFor      string
+	TempIsNew    bool
+	Error        string
+}
+
+// AdminRow is one account.
+type AdminRow struct {
+	ID, Email, Name, Role string
+	TwoFactor, MustChange bool
+	Disabled              bool
+	LastLogin             *time.Time
+}
+
+func (p AdminPage) roleLabel(role string) string {
+	if role == "owner" {
+		return p.T(i18n.AdminAdminsRoleOwner)
+	}
+	return p.T(i18n.AdminAdminsRoleStaff)
+}
+
+templ roleSelect(p AdminPage, id, current string) {
+	<select id={ id } name="role" class="field-input min-h-11">
+		<option value="staff" selected?={ current == "staff" }>{ p.T(i18n.AdminAdminsRoleStaff) }</option>
+		<option value="owner" selected?={ current == "owner" }>{ p.T(i18n.AdminAdminsRoleOwner) }</option>
+	</select>
+}
+
+templ AdminAdmins(p AdminPage, d AdminsData) {
+	@AdminShell(p) {
+		<div class="max-w-3xl space-y-g3">
+			<div>
+				<h1 class="text-h2">{ p.T(i18n.AdminAdminsTitle) }</h1>
+				<p class="mt-g1 text-ink-soft">{ p.T(i18n.AdminAdminsIntro) }</p>
+			</div>
+			if d.Error != "" {
+				<p role="alert" class="rounded-card border border-danger/40 bg-danger/5 p-3 text-sm font-medium text-danger">{ d.Error }</p>
+			}
+			if d.TempPassword != "" {
+				<section role="status" class="rounded-card border-2 border-oil bg-oil-soft/50 p-g2 sm:p-g3">
+					if d.TempIsNew {
+						<p class="font-bold text-olive">{ p.T(i18n.AdminAdminsCreated) }</p>
+					} else {
+						<p class="font-bold text-olive">{ p.T(i18n.AdminAdminsResetDone) }</p>
+					}
+					<p class="mt-1 text-sm text-ink-soft" dir="ltr">{ d.TempFor }</p>
+					<code dir="ltr" class="mt-2 block rounded-lg bg-white p-3 text-center font-mono text-lg break-all select-all">{ d.TempPassword }</code>
+					<p class="mt-2 text-sm text-ink">{ p.T(i18n.AdminAdminsTempHint) }</p>
+				</section>
+			}
+			if d.NeedsReauth {
+				@ReauthCard(p, "/admin/admins", d.ReauthError)
+			}
+			<ul class="space-y-g2">
+				for _, a := range d.Admins {
+					<li class={ adminCard, templ.KV("opacity-70", a.Disabled) }>
+						<div class="flex flex-wrap items-start justify-between gap-2">
+							<div class="min-w-0">
+								<p class="font-bold break-all text-olive" dir="ltr">{ a.Email }</p>
+								if a.Name != "" {
+									<p class="text-sm text-ink">{ a.Name }</p>
+								}
+								<p class="mt-1 text-xs text-ink-soft">
+									if a.LastLogin != nil {
+										{ p.T(i18n.AdminAdminsLastLogin, "date", p.dateLong(*a.LastLogin)) }
+									} else {
+										{ p.T(i18n.AdminAdminsNever) }
+									}
+								</p>
+							</div>
+							<div class="flex flex-wrap gap-1.5 text-xs font-bold">
+								<span class="rounded-full bg-olive/[0.08] px-2.5 py-0.5 text-olive">{ p.roleLabel(a.Role) }</span>
+								if a.ID == d.SelfID {
+									<span class="rounded-full bg-sand px-2.5 py-0.5 text-ink-soft">{ p.T(i18n.AdminAdminsYou) }</span>
+								}
+								if a.TwoFactor {
+									<span class="rounded-full bg-olive-600/15 px-2.5 py-0.5 text-olive-700">{ p.T(i18n.AdminAdminsTwoFactor) }</span>
+								}
+								if a.MustChange {
+									<span class="rounded-full bg-oil-soft px-2.5 py-0.5 text-oil-deep">{ p.T(i18n.AdminAdminsMustChange) }</span>
+								}
+								if a.Disabled {
+									<span class="rounded-full bg-danger/10 px-2.5 py-0.5 text-danger">{ p.T(i18n.AdminAdminsDisabled) }</span>
+								}
+							</div>
+						</div>
+						if a.ID != d.SelfID && !d.NeedsReauth {
+							<div class="mt-g2 flex flex-wrap items-end gap-2 border-t border-sand-deep/60 pt-g2">
+								<form method="post" action={ templ.SafeURL("/admin/admins/" + a.ID + "/role") } class="flex flex-wrap items-end gap-2">
+									@csrfField(p)
+									<div>
+										<label for={ "role-" + a.ID } class="mb-1 block text-xs font-medium text-ink-soft">{ p.T(i18n.AdminAdminsRole) }</label>
+										@roleSelect(p, "role-"+a.ID, a.Role)
+									</div>
+									<button type="submit" class={ btn("md", "whitespace-normal"), "inline-flex border border-olive/30 text-olive hover:bg-olive/5" }>{ p.T(i18n.AdminAdminsChangeRole) }</button>
+								</form>
+								<form method="post" action={ templ.SafeURL("/admin/admins/" + a.ID + "/reset") }>
+									@csrfField(p)
+									<button type="submit" class={ btn("md", "whitespace-normal"), "inline-flex border border-olive/30 text-olive hover:bg-olive/5" }>{ p.T(i18n.AdminAdminsReset) }</button>
+								</form>
+								if a.Disabled {
+									<form method="post" action={ templ.SafeURL("/admin/admins/" + a.ID + "/enable") }>
+										@csrfField(p)
+										<button type="submit" class={ btn("md", "whitespace-normal"), "inline-flex border border-olive/30 text-olive hover:bg-olive/5" }>{ p.T(i18n.AdminAdminsEnable) }</button>
+									</form>
+								} else {
+									<form method="post" action={ templ.SafeURL("/admin/admins/" + a.ID + "/disable") }>
+										@csrfField(p)
+										<input type="hidden" name="confirm" value="0" data-confirm-field/>
+										<button type="submit" data-confirm="confirm-disable" class={ btn("md", "whitespace-normal"), "inline-flex border border-danger/40 text-danger hover:bg-danger/5" }>{ p.T(i18n.AdminAdminsDisable) }</button>
+									</form>
+								}
+							</div>
+						}
+					</li>
+				}
+			</ul>
+			if !d.NeedsReauth {
+				<details class={ adminCard } open?={ d.Form.For("new").Posted() }>
+					<summary class="tap flex cursor-pointer list-none items-center gap-2 font-bold text-olive [&::-webkit-details-marker]:hidden">
+						@IconPlus("size-5")
+						{ p.T(i18n.AdminAdminsAdd) }
+					</summary>
+					<form method="post" action="/admin/admins" class="mt-g2 grid gap-g2 sm:grid-cols-2">
+						@csrfField(p)
+						@Input("new-admin", Field{Name: "email", Label: p.T(i18n.AdminAdminsEmail), Type: "email", Mode: "email", Dir: "ltr", Required: true, Max: 254}, "", d.Form.For("new"))
+						@Input("new-admin", Field{Name: "name", Label: p.T(i18n.AdminAdminsName), Max: 120}, "", d.Form.For("new"))
+						<div>
+							<label for="new-admin-role" class="mb-1.5 block font-medium text-olive">{ p.T(i18n.AdminAdminsRole) }</label>
+							@roleSelect(p, "new-admin-role", d.Form.For("new").V("role", "staff"))
+						</div>
+						<div class="sm:col-span-2">
+							@SaveRow(p, p.T(i18n.AdminAdminsAdd), d.Form.For("new").E("form"), "")
+						</div>
+					</form>
+				</details>
+			}
+			@ConfirmDialog(p, "confirm-disable", p.T(i18n.AdminAdminsDisable), p.T(i18n.AdminAdminsDisableBody))
+		</div>
+	}
+}
+
+// AuditData fills the audit log viewer.
+type AuditData struct {
+	Rows    []AuditRow
+	Total   int64
+	Page    int
+	Pages   int
+	Actors  []Option
+	Actions []string
+	Actor   string
+	Action  string
+	From    string
+	To      string
+	PrevURL string
+	NextURL string
+}
+
+// AuditRow is one audit entry.
+type AuditRow struct {
+	At                     time.Time
+	Actor, Action, Target  string
+	Details                string
+}
+
+templ AdminAudit(p AdminPage, d AuditData) {
+	@AdminShell(p) {
+		<div>
+			<h1 class="text-h2">{ p.T(i18n.AdminAuditTitle) }</h1>
+			<p class="mt-g1 text-ink-soft">{ p.T(i18n.AdminAuditIntro) }</p>
+			<form method="get" action="/admin/audit" class="mt-g3 grid gap-3 rounded-card bg-white p-4 shadow-lift ring-1 ring-sand-deep/50 sm:grid-cols-2 lg:grid-cols-4">
+				<label class="block">
+					<span class="mb-1 block text-xs font-medium text-ink-soft">{ p.T(i18n.AdminAuditActor) }</span>
+					<select name="actor" data-autosubmit class="field-input min-h-11 w-full">
+						<option value="">{ p.T(i18n.AdminOrdersAll) }</option>
+						for _, a := range d.Actors {
+							<option value={ a.Value } selected?={ d.Actor == a.Value }>{ a.Label }</option>
+						}
+					</select>
+				</label>
+				<label class="block">
+					<span class="mb-1 block text-xs font-medium text-ink-soft">{ p.T(i18n.AdminAuditAction) }</span>
+					<select name="action" data-autosubmit class="field-input min-h-11 w-full" dir="ltr">
+						<option value="">{ p.T(i18n.AdminOrdersAll) }</option>
+						for _, a := range d.Actions {
+							<option value={ a } selected?={ d.Action == a }>{ a }</option>
+						}
+					</select>
+				</label>
+				<label class="block">
+					<span class="mb-1 block text-xs font-medium text-ink-soft">{ p.T(i18n.AdminOrdersFrom) }</span>
+					<input type="date" name="from" value={ d.From } class="field-input min-h-11"/>
+				</label>
+				<label class="block">
+					<span class="mb-1 block text-xs font-medium text-ink-soft">{ p.T(i18n.AdminOrdersTo) }</span>
+					<input type="date" name="to" value={ d.To } class="field-input min-h-11"/>
+				</label>
+				<div class="flex flex-wrap items-center justify-between gap-2 sm:col-span-2 lg:col-span-4">
+					<span class="text-sm text-ink-soft">{ p.T(i18n.AdminAuditCount, "count", p.num(d.Total)) }</span>
+					<button type="submit" class={ btn("md"), "inline-flex bg-olive text-limewash hover:bg-olive-hover" }>{ p.T(i18n.AdminOrdersFilter) }</button>
+				</div>
+			</form>
+			<ul class="mt-g2 divide-y divide-sand-deep/60 overflow-hidden rounded-card bg-white shadow-lift ring-1 ring-sand-deep/50">
+				if len(d.Rows) == 0 {
+					<li class="p-g3 text-center text-ink-soft">{ p.T(i18n.AdminAuditEmpty) }</li>
+				}
+				for _, a := range d.Rows {
+					<li class="p-g2 text-sm">
+						<div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+							<span class="font-mono font-bold text-olive" dir="ltr">{ a.Action }</span>
+							<span class="text-xs text-ink-soft tabular-nums">{ p.dateLong(a.At) }</span>
+						</div>
+						<p class="mt-0.5 break-all text-ink-soft" dir="ltr">
+							if a.Actor != "" {
+								{ a.Actor }
+							} else {
+								{ p.T(i18n.AdminAuditSystem) }
+							}
+							if a.Target != "" {
+								{ " · " + a.Target }
+							}
+						</p>
+						if a.Details != "" {
+							<p class="mt-1 font-mono text-xs break-all text-ink" dir="ltr">{ a.Details }</p>
+						}
+					</li>
+				}
+			</ul>
+			<nav aria-label={ p.T(i18n.AdminOrdersPagination) } class="mt-4 flex items-center justify-between gap-2">
+				if d.PrevURL != "" {
+					<a href={ templ.SafeURL(d.PrevURL) } rel="prev" aria-label={ p.T(i18n.AdminOrdersPrev) } class={ btn("md", "px-3"), "inline-flex border border-olive/30 text-olive hover:bg-olive/5" }>
+						@IconChevronPrev("")
+						<span class="hidden sm:inline">{ p.T(i18n.AdminOrdersPrev) }</span>
+					</a>
+				} else {
+					<span></span>
+				}
+				<span class="text-sm text-ink-soft tabular-nums">{ p.T(i18n.AdminOrdersPageOf, "page", strconv.Itoa(d.Page), "pages", strconv.Itoa(d.Pages)) }</span>
+				if d.NextURL != "" {
+					<a href={ templ.SafeURL(d.NextURL) } rel="next" aria-label={ p.T(i18n.AdminOrdersNext) } class={ btn("md", "px-3"), "inline-flex border border-olive/30 text-olive hover:bg-olive/5" }>
+						<span class="hidden sm:inline">{ p.T(i18n.AdminOrdersNext) }</span>
+						@IconChevronNext("")
+					</a>
+				} else {
+					<span></span>
+				}
+			</nav>
+		</div>
+	}
+}

@@ -1,0 +1,73 @@
+package view
+
+import (
+	"strconv"
+	"strings"
+
+	"github.com/omarchaouki/zaytona-go/internal/i18n"
+)
+
+// NotifyData is the live notification state (10 s poll).
+type NotifyData struct {
+	Count int64
+	// IDs are the newest unseen orders (for the chime: a new id = a new order).
+	IDs []string
+	// Newest is the newest unseen order not closed in this browser, if any.
+	Newest *OrderRow
+	// Closable are the ids the close button hides.
+	Closable []string
+}
+
+// AdminNotifications is the fragment admin.js swaps into [data-notifications].
+templ AdminNotifications(p AdminPage, d NotifyData) {
+	<div data-notify-root data-count={ strconv.FormatInt(d.Count, 10) } data-ids={ strings.Join(d.IDs, ",") }>
+		if o := d.Newest; o != nil {
+			// Phones: one slim bar, so the page underneath stays usable.
+			<div class="notify-in pointer-events-auto flex w-full items-center gap-2 rounded-full bg-danger py-1 ps-3 pe-1 text-white shadow-[0_12px_30px_-12px_rgb(163_39_27/0.8)] ring-1 ring-white/20 sm:hidden">
+				@IconBell("notify-ring size-5 shrink-0")
+				<p class="min-w-0 flex-1 truncate text-sm">
+					<span class="font-bold">
+						if d.Count > 1 {
+							{ p.T(i18n.AdminNotifyCountShort, "count", strconv.FormatInt(d.Count, 10)) }
+						} else {
+							{ p.T(i18n.AdminNotifyTitle) }
+						}
+					</span>
+					· <bdi>{ o.Customer }</bdi>
+				</p>
+				if d.Count > 1 {
+					<a href="/admin/orders?paid=unseen" class="tap inline-flex shrink-0 items-center rounded-full bg-white px-3 text-sm font-bold text-danger">{ p.T(i18n.AdminNotifyView) }</a>
+				} else {
+					<a href={ templ.SafeURL("/admin/orders/" + o.ID) } class="tap inline-flex shrink-0 items-center rounded-full bg-white px-3 text-sm font-bold text-danger">{ p.T(i18n.AdminNotifyOpen) }</a>
+				}
+				<button type="button" data-notify-close={ strings.Join(d.Closable, ",") } aria-label={ p.T(i18n.AdminNotifyClose) } class="tap inline-flex shrink-0 items-center justify-center rounded-full text-white/85 hover:bg-white/15">
+					@IconX("size-5")
+				</button>
+			</div>
+			// Tablets and computers: a card for the newest order.
+			<div class="notify-in pointer-events-auto relative hidden w-[22rem] overflow-hidden rounded-card bg-danger text-white shadow-[0_18px_40px_-16px_rgb(163_39_27/0.8)] ring-1 ring-white/20 sm:block">
+				<span aria-hidden="true" class="absolute inset-y-0 start-0 w-1.5 bg-white/40"></span>
+				<div class="flex items-start gap-3 p-3 ps-4">
+					<span class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full bg-white/15">
+						@IconBell("notify-ring size-5")
+					</span>
+					<div class="min-w-0 flex-1">
+						<p class="text-sm font-bold">{ p.T(i18n.AdminNotifyTitle) }</p>
+						<p class="truncate text-sm text-white/90"><span dir="ltr" class="font-bold tabular-nums">{ o.Reference }</span> · <bdi>{ o.Customer }</bdi> · { o.City }</p>
+						<p class="text-sm text-white/90 tabular-nums">{ p.mad(o.Total) } · { o.CreatedAt.In(casablanca).Format("15:04") }</p>
+						<a href={ templ.SafeURL("/admin/orders/" + o.ID) } class="tap mt-1 inline-flex items-center rounded-full bg-white px-4 text-sm font-bold text-danger hover:bg-white/90">{ p.T(i18n.AdminNotifyOpen) }</a>
+					</div>
+					<button type="button" data-notify-close={ o.ID } aria-label={ p.T(i18n.AdminNotifyClose) } class="tap -m-1 inline-flex items-center justify-center rounded-full text-white/80 hover:bg-white/15 hover:text-white">
+						@IconX("size-5")
+					</button>
+				</div>
+			</div>
+			if d.Count > 1 {
+				<div class="pointer-events-auto hidden w-[22rem] items-center justify-between gap-2 rounded-card bg-olive-950/95 px-3 py-1 text-sm text-limewash shadow-lift sm:flex">
+					<span>{ p.T(i18n.AdminNotifyCount, "count", strconv.FormatInt(d.Count, 10)) }</span>
+					<button type="button" data-notify-seen-all class="tap rounded-full px-2 font-bold text-oil-bright hover:bg-limewash/10">{ p.T(i18n.AdminNotifyMarkAll) }</button>
+				</div>
+			}
+		}
+	</div>
+}

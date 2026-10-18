@@ -1,0 +1,9 @@
+# Vendored front-end files: path (from web/static) | version | source | sha256
+# A test (web/vendor_test.go) recomputes every hash; update this file when a file changes.
+fonts/archivo-latin-wght-normal.woff2 | 5.3.0 | https://cdn.jsdelivr.net/npm/@fontsource-variable/archivo@5.3.0/files/archivo-latin-wght-normal.woff2 | 8f704806dbedeaaeca334b11ec348bc3ac3a439d6431544b3afb54f534ee4967
+fonts/ibm-plex-sans-arabic-arabic-400-normal.woff2 | 5.3.0 | https://cdn.jsdelivr.net/npm/@fontsource/ibm-plex-sans-arabic@5.3.0/files/ibm-plex-sans-arabic-arabic-400-normal.woff2 | 6010e7fd0dce5d527583951750728cbe3c895efbd16aa0f809ab8c824878c9d8
+fonts/ibm-plex-sans-arabic-arabic-500-normal.woff2 | 5.3.0 | https://cdn.jsdelivr.net/npm/@fontsource/ibm-plex-sans-arabic@5.3.0/files/ibm-plex-sans-arabic-arabic-500-normal.woff2 | 90aef64fea9794f232332e907d45810ab268d1a11721340025eba2a2cdb36d5c
+fonts/ibm-plex-sans-arabic-arabic-700-normal.woff2 | 5.3.0 | https://cdn.jsdelivr.net/npm/@fontsource/ibm-plex-sans-arabic@5.3.0/files/ibm-plex-sans-arabic-arabic-700-normal.woff2 | 04c730b4292731ccedadd5bd80756124364ae4923895145d9cd7b1f28e443de1
+fonts/ibm-plex-sans-arabic-latin-400-normal.woff2 | 5.3.0 | https://cdn.jsdelivr.net/npm/@fontsource/ibm-plex-sans-arabic@5.3.0/files/ibm-plex-sans-arabic-latin-400-normal.woff2 | 9ed8dcb02e6c7246de4c120295fafa39a7bb73085f4951a4524a07dc911069f2
+fonts/ibm-plex-sans-arabic-latin-500-normal.woff2 | 5.3.0 | https://cdn.jsdelivr.net/npm/@fontsource/ibm-plex-sans-arabic@5.3.0/files/ibm-plex-sans-arabic-latin-500-normal.woff2 | be6a3b2e37f3ad67aa822a55ce356d28c416331c97530a1ec076c2118240ca2d
+fonts/ibm-plex-sans-arabic-latin-700-normal.woff2 | 5.3.0 | https://cdn.jsdelivr.net/npm/@fontsource/ibm-plex-sans-arabic@5.3.0/files/ibm-plex-sans-arabic-latin-700-normal.woff2 | ae2d59f91ecf9f7ed279e4a1fc1a9da8170fb0ce5b9152917a8f759033f5777c

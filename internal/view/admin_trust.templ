@@ -1,0 +1,135 @@
+package view
+
+import "github.com/omarchaouki/zaytona-go/internal/i18n"
+
+// TrustData fills Admin > Certificates.
+type TrustData struct {
+	Certs    []CertRow
+	Form     *FormState
+	UploadMB string
+}
+
+// CertRow is one certificate in the editor.
+type CertRow struct {
+	ID, Type, LabelAr, LabelFr, Number, Issued, Expires string
+	Public                                              bool
+	SortOrder                                           int32
+	Scan                                                Image
+	HasScan                                             bool
+}
+
+// Live: shown on the site only with a number, a scan and the public flag.
+func (c CertRow) Live() bool { return c.Public && c.Number != "" && c.HasScan }
+
+var certTypes = []struct {
+	Value string
+	Label i18n.Key
+}{
+	{"onssa", i18n.AdminTrustTypeOnssa},
+	{"organic", i18n.AdminTrustTypeOrganic},
+	{"igp", i18n.AdminTrustTypeIgp},
+	{"iso", i18n.AdminTrustTypeIso},
+	{"other", i18n.AdminTrustTypeOther},
+}
+
+func (p AdminPage) certTypeLabel(t string) string {
+	for _, c := range certTypes {
+		if c.Value == t {
+			return p.T(c.Label)
+		}
+	}
+	return t
+}
+
+templ AdminTrust(p AdminPage, d TrustData) {
+	@AdminShell(p) {
+		<div class="max-w-3xl">
+			<h1 class="text-h2">{ p.T(i18n.AdminTrustTitle) }</h1>
+			<p class="mt-g1 text-ink-soft">{ p.T(i18n.AdminTrustIntro) }</p>
+			@OwnerNote(p)
+			<ul class="mt-g3 space-y-g2">
+				if len(d.Certs) == 0 {
+					<li class="rounded-card border-2 border-dashed border-sand-deep p-g4 text-center text-ink-soft">{ p.T(i18n.AdminTrustEmpty) }</li>
+				}
+				for _, c := range d.Certs {
+					<li class={ adminCard }>
+						<div class="flex flex-wrap items-center gap-g2">
+							if c.HasScan {
+								<a href={ templ.SafeURL(c.Scan.Fallback) } target="_blank" rel="noopener" class="shrink-0" aria-label={ p.T(i18n.AdminTrustViewScan) }>
+									@Picture(c.Scan, "", "64px", false, "block size-16 overflow-hidden rounded-card ring-1 ring-sand-deep", "size-16 object-cover")
+								</a>
+							} else {
+								<span class="flex size-16 shrink-0 items-center justify-center rounded-card bg-sand text-ink-soft">
+									@IconFileCheck2("size-6")
+								</span>
+							}
+							<div class="min-w-0 flex-1">
+								<p class="font-bold text-olive">{ p.certTypeLabel(c.Type) } · <span dir="ltr" class="tabular-nums">{ c.Number }</span></p>
+								if c.Live() {
+									<p class="mt-1 inline-flex items-center gap-1 rounded-full bg-olive-600/15 px-2 py-0.5 text-xs font-bold text-olive-700">
+										@IconBadgeCheck("size-3.5")
+										{ p.T(i18n.AdminTrustLive) }
+									</p>
+								} else {
+									<p class="mt-1 text-xs font-medium text-oil-deep">{ p.T(i18n.AdminTrustHidden) }</p>
+								}
+							</div>
+							if p.Owner {
+								@DeleteButton(p, "/admin/certificates/"+c.ID+"/delete", p.T(i18n.AdminTrustDelete), "confirm-cert")
+							}
+						</div>
+						if p.Owner {
+							<details class="mt-g2 border-t border-sand-deep/60 pt-g1" open?={ d.Form.For(c.ID).Posted() }>
+								<summary class="tap inline-flex cursor-pointer list-none items-center gap-1.5 rounded-full px-2 text-sm font-medium text-olive hover:bg-sand [&::-webkit-details-marker]:hidden">
+									@IconPencil("size-4")
+									{ p.T(i18n.AdminTrustEdit) }
+								</summary>
+								<div class="mt-g2">
+									@certForm(p, d, c, c.ID, "/admin/certificates/"+c.ID, d.Form.For(c.ID))
+								</div>
+							</details>
+						}
+					</li>
+				}
+			</ul>
+			if p.Owner {
+				<details class="mt-g3" open?={ d.Form.For("new").Posted() || len(d.Certs) == 0 }>
+					<summary class={ btn("md"), "inline-flex cursor-pointer list-none bg-olive text-limewash hover:bg-olive-hover [&::-webkit-details-marker]:hidden" }>
+						@IconPlus("")
+						{ p.T(i18n.AdminTrustAdd) }
+					</summary>
+					<div class="mt-g2 rounded-card bg-white p-g3 shadow-lift ring-2 ring-oil">
+						@certForm(p, d, CertRow{Type: "onssa"}, "new", "/admin/certificates", d.Form.For("new"))
+					</div>
+				</details>
+				@ConfirmDialog(p, "confirm-cert", p.T(i18n.AdminCommonDeleteTitle), p.T(i18n.AdminTrustDeleteConfirm))
+			}
+		</div>
+	}
+}
+
+templ certForm(p AdminPage, d TrustData, c CertRow, key, action string, s *FormState) {
+	<form method="post" action={ templ.SafeURL(action) } enctype="multipart/form-data" class="grid gap-g2 sm:grid-cols-2">
+		@csrfField(p)
+		<div>
+			<label for={ key + "-type" } class="mb-1.5 block font-medium text-olive">{ p.T(i18n.AdminTrustType) }</label>
+			<select id={ key + "-type" } name="type" class="field-input min-h-11">
+				for _, t := range certTypes {
+					<option value={ t.Value } selected?={ s.V("type", c.Type) == t.Value }>{ p.T(t.Label) }</option>
+				}
+			</select>
+		</div>
+		@Input(key, Field{Name: "number", Label: p.T(i18n.AdminTrustNumber), Dir: "ltr", Required: true, Max: 80}, c.Number, s)
+		@Input(key, Field{Name: "labelAr", Label: p.T(i18n.AdminTrustLabelAr), Dir: "rtl", Max: 120}, c.LabelAr, s)
+		@Input(key, Field{Name: "labelFr", Label: p.T(i18n.AdminTrustLabelFr), Dir: "ltr", Max: 120}, c.LabelFr, s)
+		@Input(key, Field{Name: "issued", Label: p.T(i18n.AdminTrustIssued), Type: "date", Dir: "ltr"}, c.Issued, s)
+		@Input(key, Field{Name: "expires", Label: p.T(i18n.AdminTrustExpires), Type: "date", Dir: "ltr"}, c.Expires, s)
+		<div class="sm:col-span-2">
+			@PhotoInput(p, key, "scan", p.T(i18n.AdminTrustScan), p.T(i18n.AdminTrustScanHint, "mb", d.UploadMB), s.E("scan"))
+		</div>
+		@Checkbox("isPublic", p.T(i18n.AdminTrustPublic), s.Checked("isPublic", c.Public), "sm:col-span-2")
+		<div class="space-y-2 sm:col-span-2">
+			@SaveRow(p, p.T(i18n.AdminTrustSave), s.E("form"), p.T(i18n.AdminCommonUploading))
+		</div>
+	</form>
+}

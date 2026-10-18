@@ -1,0 +1,324 @@
+package view
+
+import "github.com/omarchaouki/zaytona-go/internal/i18n"
+
+const orderCard = "rounded-card bg-white p-5 shadow-lift ring-1 ring-sand-deep/50"
+
+// AdminOrder is the order page: customer, items (editable), internal note,
+// status with timeline, paid toggle, delete (owner) and a printable slip.
+templ AdminOrder(p AdminPage, o OrderDetail) {
+	@AdminShell(p) {
+		<div data-order={ o.ID } data-order-seen?={ o.Seen }>
+			<div data-print-hide>
+				<a href="/admin/orders" class="tap inline-flex items-center gap-1.5 text-sm text-ink-soft hover:text-olive">
+					@IconArrowBack("size-4")
+					{ p.T(i18n.AdminOrderBack) }
+				</a>
+				<div class="mt-2 flex flex-wrap items-center gap-3">
+					<h1 class="text-h2 tabular-nums" dir="ltr">{ o.Reference }</h1>
+					@StatusBadge(p, o.Status)
+					@paidControl(p, o)
+					<div class="flex w-full flex-wrap gap-g1 sm:ms-auto sm:w-auto">
+						<button type="button" data-print hidden class={ btn("md"), "inline-flex border border-olive/30 text-olive hover:bg-olive/5" }>
+							@IconPrinter("")
+							{ p.T(i18n.AdminOrderPrint) }
+						</button>
+						if p.Owner {
+							<form method="post" action={ templ.SafeURL("/admin/orders/" + o.ID + "/delete") }>
+								@csrfField(p)
+								<input type="hidden" name="return" value="/admin/orders"/>
+								<input type="hidden" name="confirm" value="0" data-confirm-field/>
+								<button type="submit" data-confirm="confirm-delete" data-confirm-count="1" class={ btn("md"), "inline-flex border border-danger/40 text-danger hover:bg-danger/5" }>
+									@IconTrash("")
+									{ p.T(i18n.AdminOrdersDelete) }
+								</button>
+							</form>
+						}
+					</div>
+				</div>
+				<p class="mt-1 text-sm text-ink-soft">{ p.T(i18n.AdminOrderPlacedOn, "date", p.dateLong(o.CreatedAt)) }</p>
+				<div class="mt-6 grid gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] [&>*]:min-w-0">
+					<div class="space-y-5">
+						@customerCard(p, o)
+						@itemsCard(p, o)
+						@noteCard(p, o)
+					</div>
+					<div class="space-y-5">
+						@statusCard(p, o)
+						@timeline(p, o)
+					</div>
+				</div>
+			</div>
+			@packingSlip(p, o)
+			if p.Owner {
+				@ConfirmDeleteDialog(p, "confirm-delete")
+			}
+		</div>
+	}
+}
+
+templ paidControl(p AdminPage, o OrderDetail) {
+	<form method="post" action={ templ.SafeURL("/admin/orders/" + o.ID + "/paid") }>
+		@csrfField(p)
+		if o.PaidAt != nil {
+			<input type="hidden" name="paid" value="0"/>
+			<span class="inline-flex items-center gap-1 rounded-full bg-olive-600/15 py-0.5 ps-2.5 pe-1 text-xs font-bold text-olive-700">
+				@IconBadgeCheck("size-4")
+				{ p.T(i18n.AdminOrderPaidOn, "date", p.dateLong(*o.PaidAt)) }
+				<button type="submit" class="tap -my-3 rounded-full px-2 font-medium text-ink-soft underline underline-offset-2 hover:text-danger">{ p.T(i18n.AdminOrdersMarkUnpaid) }</button>
+			</span>
+		} else {
+			<input type="hidden" name="paid" value="1"/>
+			<button type="submit" class={ btn("md"), "inline-flex bg-olive-600 text-limewash hover:bg-olive-700" }>
+				@IconBadgeCheck("")
+				{ p.T(i18n.AdminOrdersMarkPaid) }
+			</button>
+		}
+	</form>
+}
+
+templ cardHead(title string) {
+	<h2 class="text-h3">{ title }</h2>
+}
+
+templ field(label, value string, wide bool) {
+	<div class={ templ.KV("sm:col-span-2", wide) }>
+		<dt class="text-ink-soft">{ label }</dt>
+		<dd class="mt-0.5 font-medium break-words whitespace-pre-line">{ value }</dd>
+	</div>
+}
+
+templ customerCard(p AdminPage, o OrderDetail) {
+	<section class={ orderCard }>
+		@cardHead(p.T(i18n.AdminOrderCustomer))
+		<div class="mt-4">
+			<p class="text-lg font-bold"><bdi>{ o.Customer }</bdi></p>
+			<p class="mt-0.5 text-ink-soft tabular-nums" dir="ltr">{ phoneDisplay(o.Phone) }</p>
+			<div class="mt-3 flex flex-wrap gap-2">
+				<a href={ templ.SafeURL("tel:" + o.Phone) } class={ btn("md"), "inline-flex bg-olive text-limewash hover:bg-olive-hover" }>
+					@IconPhone("")
+					{ p.T(i18n.AdminOrderCall) }
+				</a>
+				<a href={ templ.SafeURL(o.WhatsAppHref) } target="_blank" rel="noopener noreferrer" class={ btn("md"), "inline-flex bg-whatsapp text-whatsapp-ink hover:brightness-95" }>
+					@WhatsAppIcon("")
+					{ p.T(i18n.AdminOrderWhatsapp) }
+				</a>
+			</div>
+			<dl class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+				@field(p.T(i18n.AdminOrderCity), o.City, false)
+				@field(p.T(i18n.AdminOrderLanguage), p.localeName(o.Locale), false)
+				if o.Source != "" {
+					@field(p.T(i18n.AdminOrderSource), o.Source, true)
+				}
+				if o.Address != "" {
+					@field(p.T(i18n.AdminOrderAddress), o.Address, true)
+				}
+				if o.Note != "" {
+					@field(p.T(i18n.AdminOrderNote), o.Note, true)
+				}
+			</dl>
+		</div>
+	</section>
+}
+
+// itemsCard: read-only, or (?edit=1) a form with quantities and the delivery fee.
+templ itemsCard(p AdminPage, o OrderDetail) {
+	<section class={ orderCard }>
+		<div class="flex items-center justify-between gap-3">
+			@cardHead(p.T(i18n.AdminOrderItems))
+			if !o.Editing {
+				<a href={ templ.SafeURL("/admin/orders/" + o.ID + "?edit=1#items") } class="tap inline-flex items-center gap-1.5 rounded-full px-3 text-sm text-olive hover:bg-sand">
+					@IconPencil("size-4")
+					{ p.T(i18n.AdminOrderEdit) }
+				</a>
+			}
+		</div>
+		<form id="items" method="post" action={ templ.SafeURL("/admin/orders/" + o.ID + "/edit") } class="mt-4">
+			@csrfField(p)
+			<table class="w-full text-sm">
+				<thead class="text-xs text-ink-soft">
+					<tr>
+						<th class="pb-2 text-start font-medium">{ p.T(i18n.AdminOrderItems) }</th>
+						<th class="pb-2 text-center font-medium">{ p.T(i18n.AdminOrderQuantity) }</th>
+						<th class="pb-2 text-end font-medium">{ p.T(i18n.AdminOrderLineTotal) }</th>
+					</tr>
+				</thead>
+				<tbody class="divide-y divide-sand-deep/50">
+					for _, it := range o.Items {
+						<tr>
+							if o.Editing {
+								// Editing: the name cell takes the quantity column too (room for the field on phones).
+								<td class="py-2.5" colspan="2">
+									<label for={ "q_" + it.ID } class="block font-medium">{ it.Name }</label>
+									<p class="text-xs text-ink-soft tabular-nums">{ p.mad(it.UnitPrice) } × </p>
+									<input id={ "q_" + it.ID } type="number" name={ "q_" + it.ID } min="0" max="999" value={ qtyString(it.Quantity) } inputmode="numeric" class="field-input mt-1.5 min-h-11 w-full max-w-[10rem] text-center"/>
+								</td>
+							} else {
+								<td class="py-2.5">
+									<p class="font-medium">{ it.Name }</p>
+									<p class="text-xs text-ink-soft tabular-nums">{ p.mad(it.UnitPrice) }</p>
+								</td>
+								<td class="py-2.5 text-center tabular-nums">{ qtyString(it.Quantity) }</td>
+							}
+							<td class="py-2.5 text-end tabular-nums">{ p.mad(it.lineTotal()) }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+			<dl class="mt-3 space-y-1.5 border-t border-sand-deep pt-3 text-sm">
+				<div class="flex justify-between gap-3">
+					<dt class="text-ink-soft">{ p.T(i18n.AdminOrderSubtotal) }</dt>
+					<dd class="tabular-nums">{ p.mad(o.Subtotal) }</dd>
+				</div>
+				<div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+					<dt class="text-ink-soft">
+						if o.Editing {
+							<label for="order-fee">{ p.T(i18n.AdminOrderDeliveryFee) }</label>
+						} else {
+							{ p.T(i18n.AdminOrderDeliveryFee) }
+						}
+					</dt>
+					<dd class={ "tabular-nums", templ.KV("w-full sm:w-auto", o.Editing) }>
+						if o.Editing {
+							<input id="order-fee" name="fee" inputmode="decimal" value={ feeValue(o.DeliveryFee) } maxlength="10" aria-describedby="order-fee-hint" class="field-input min-h-11 w-full text-end sm:w-40" dir="ltr"/>
+						} else if o.DeliveryFee == nil {
+							{ p.T(i18n.AdminOrderDeliveryTbc) }
+						} else {
+							{ p.mad(*o.DeliveryFee) }
+						}
+					</dd>
+				</div>
+				<div class="flex justify-between gap-3">
+					<dt class="font-bold text-olive">{ p.T(i18n.AdminOrderTotal) }</dt>
+					<dd class="font-bold text-olive tabular-nums">{ p.mad(o.Total) }</dd>
+				</div>
+			</dl>
+			if o.Editing {
+				<div class="mt-4 space-y-3">
+					<p id="order-fee-hint" class="text-xs text-ink-soft">{ p.T(i18n.AdminOrderDeliveryFeeLabel) }. { p.T(i18n.AdminOrderRemoveHint) }</p>
+					@formError(o.EditError)
+					<div class="flex flex-wrap gap-2">
+						<button type="submit" class={ btn("md"), "inline-flex bg-olive text-limewash hover:bg-olive-hover" }>{ p.T(i18n.AdminOrderSave) }</button>
+						<a href={ templ.SafeURL("/admin/orders/" + o.ID) } class={ btn("md"), "inline-flex border border-olive/30 text-olive hover:bg-olive/5" }>{ p.T(i18n.AdminOrderCancelEdit) }</a>
+					</div>
+				</div>
+			}
+		</form>
+	</section>
+}
+
+templ noteCard(p AdminPage, o OrderDetail) {
+	<form method="post" action={ templ.SafeURL("/admin/orders/" + o.ID + "/note") } class={ orderCard }>
+		@csrfField(p)
+		<label for="internal-note" class="text-h3 block">{ p.T(i18n.AdminOrderInternalNote) }</label>
+		<textarea id="internal-note" name="note" rows="3" maxlength="2000" aria-describedby="internal-note-hint" class="field-input mt-4 py-3">{ o.InternalNote }</textarea>
+		<p id="internal-note-hint" class="mt-1.5 text-xs text-ink-soft">{ p.T(i18n.AdminOrderInternalHint) }</p>
+		<button type="submit" class={ btn("md"), "mt-3 inline-flex border border-olive/30 text-olive hover:bg-olive/5" }>{ p.T(i18n.AdminOrderSave) }</button>
+	</form>
+}
+
+templ statusCard(p AdminPage, o OrderDetail) {
+	<form method="post" action={ templ.SafeURL("/admin/orders/" + o.ID + "/status") } class={ orderCard }>
+		@csrfField(p)
+		<fieldset>
+			<legend class="text-h3">{ p.T(i18n.AdminOrderStatus) }</legend>
+			<div class="mt-4 grid grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-2">
+				for _, s := range OrderStatuses {
+					<label class="flex min-h-11 cursor-pointer items-center gap-2 rounded-field border border-sand-deep px-3 py-2 text-sm has-[:checked]:border-olive has-[:checked]:bg-olive/5">
+						<input type="radio" name="status" value={ s } checked?={ o.Status == s } class="size-4 accent-olive"/>
+						{ p.statusLabel(s) }
+					</label>
+				}
+			</div>
+		</fieldset>
+		<label class="mt-3 block">
+			<span class="mb-1 block text-xs text-ink-soft">{ p.T(i18n.AdminOrderStatusNote) }</span>
+			<input name="note" maxlength="500" class="field-input min-h-11"/>
+		</label>
+		<button type="submit" class={ btn("md"), "mt-3 inline-flex bg-olive text-limewash hover:bg-olive-hover" }>{ p.T(i18n.AdminOrderChangeStatus) }</button>
+	</form>
+}
+
+templ timeline(p AdminPage, o OrderDetail) {
+	<section class={ orderCard }>
+		@cardHead(p.T(i18n.AdminOrderTimeline))
+		<ol class="relative mt-4 space-y-4 border-s-2 border-sand-deep ps-4">
+			for _, e := range o.Events {
+				<li class="relative">
+					<span aria-hidden="true" class="absolute -start-[1.4rem] top-1.5 size-2.5 rounded-full bg-olive-600 ring-4 ring-white"></span>
+					<p class="text-sm">
+						if e.Kind == "status" && e.To != "" {
+							<span class="inline-flex flex-wrap items-center gap-1.5">
+								if e.From != "" {
+									@StatusBadge(p, e.From)
+									<span aria-hidden="true" class="rtl:-scale-x-100">→</span>
+								}
+								@StatusBadge(p, e.To)
+							</span>
+						}
+						if t := p.eventText(e); t != "" {
+							<span class="block break-words text-ink">{ t }</span>
+						}
+					</p>
+					<p class="mt-0.5 text-xs text-ink-soft">
+						{ p.dateLong(e.At) } ·
+						if e.By != "" {
+							<bdi dir="ltr">{ e.By }</bdi>
+						} else {
+							{ p.T(i18n.AdminOrderSystem) }
+						}
+					</p>
+				</li>
+			}
+		</ol>
+	</section>
+}
+
+// packingSlip prints on its own (print CSS hides everything else).
+templ packingSlip(p AdminPage, o OrderDetail) {
+	<section class="print-only text-black" aria-hidden="true">
+		<div class="flex items-start justify-between border-b-2 border-black pb-3">
+			<div>
+				<p class="text-xl font-bold">{ o.SiteName }</p>
+				<p class="text-sm">{ p.T(i18n.AdminOrderSlipTitle) }</p>
+			</div>
+			<div class="text-end">
+				<p class="text-2xl font-bold tabular-nums" dir="ltr">{ o.Reference }</p>
+				<p class="text-sm">{ p.dateLong(o.CreatedAt) }</p>
+			</div>
+		</div>
+		<div class="mt-4 text-lg">
+			<p class="font-bold">{ o.Customer }</p>
+			<p dir="ltr" class="tabular-nums">{ phoneDisplay(o.Phone) }</p>
+			<p>{ o.City }</p>
+			if o.Address != "" {
+				<p class="whitespace-pre-line">{ o.Address }</p>
+			}
+		</div>
+		<table class="mt-4 w-full border-collapse text-base">
+			<tbody>
+				for _, it := range o.Items {
+					<tr class="border-b border-black/30">
+						<td class="py-2">{ it.Name }</td>
+						<td class="py-2 text-end font-bold tabular-nums">× { qtyString(it.Quantity) }</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+		<dl class="mt-4 space-y-1 text-base">
+			<div class="flex justify-between">
+				<dt>{ p.T(i18n.AdminOrderTotal) }</dt>
+				<dd class="tabular-nums">{ p.mad(o.Total) }</dd>
+			</div>
+			<div class="flex justify-between border-t-2 border-black pt-2 text-xl font-bold">
+				<dt>{ p.T(i18n.AdminOrderSlipCollect) }</dt>
+				<dd class="tabular-nums">
+					{ p.mad(o.Total) }
+					if o.DeliveryFee == nil {
+						{ " + " + p.T(i18n.AdminOrderDeliveryFee) }
+					}
+				</dd>
+			</div>
+		</dl>
+	</section>
+}

@@ -1,0 +1,242 @@
+package view
+
+import (
+	"strconv"
+
+	"github.com/omarchaouki/zaytona-go/internal/i18n"
+)
+
+// LoginData fills the login page.
+type LoginData struct {
+	Email string
+	Next  string
+	Error string
+}
+
+templ formError(msg string) {
+	if msg != "" {
+		<p role="alert" class="mt-4 flex items-start gap-2 text-sm font-medium text-danger">
+			@IconAlertCircle("mt-0.5 size-4 shrink-0")
+			{ msg }
+		</p>
+	}
+}
+
+templ fieldLabel(id, label string) {
+	<label for={ id } class="mb-1.5 block font-medium text-olive">{ label }</label>
+}
+
+templ AdminLogin(p AdminPage, d LoginData) {
+	@AuthDocument(p, "/admin/login?lang="+string(p.Locale.Other())) {
+		<form method="post" action="/admin/login">
+			<input type="hidden" name="lang" value={ string(p.Locale) }/>
+			if d.Next != "" {
+				<input type="hidden" name="next" value={ d.Next }/>
+			}
+			<h1 class="text-h2">{ p.T(i18n.AdminLoginTitle) }</h1>
+			<p class="mt-1 text-ink-soft">{ p.T(i18n.AdminLoginSubtitle) }</p>
+			<div class="mt-6">
+				@fieldLabel("login-email", p.T(i18n.AdminLoginEmail))
+				<input id="login-email" name="email" type="email" autocomplete="username" inputmode="email" dir="ltr" required maxlength="254" value={ d.Email } class="field-input" aria-invalid?={ d.Error != "" }/>
+			</div>
+			<div class="mt-4">
+				@fieldLabel("login-password", p.T(i18n.AdminLoginPassword))
+				<input id="login-password" name="password" type="password" autocomplete="current-password" dir="ltr" required maxlength="128" class="field-input" aria-invalid?={ d.Error != "" }/>
+			</div>
+			@formError(d.Error)
+			<button type="submit" data-busy-label={ p.T(i18n.AdminLoginSubmitting) } class={ btn("lg"), "mt-6 inline-flex w-full bg-olive text-limewash hover:bg-olive-hover" }>
+				{ p.T(i18n.AdminLoginSubmit) }
+			</button>
+		</form>
+	}
+}
+
+templ AdminTwoFactor(p AdminPage, errMsg string) {
+	@AuthDocument(p, "") {
+		<form method="post" action="/admin/2fa">
+			@csrfField(p)
+			<h1 class="text-h2">{ p.T(i18n.AdminLoginTwoFactorTitle) }</h1>
+			<p class="mt-1 text-ink-soft">{ p.T(i18n.AdminLoginTwoFactorHint) }</p>
+			<div class="mt-6">
+				@fieldLabel("mfa-code", p.T(i18n.AdminLoginCode))
+				<input id="mfa-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" dir="ltr" required maxlength="20" autofocus class="field-input text-center text-xl tracking-[0.3em] tabular-nums" aria-describedby="mfa-recovery" aria-invalid?={ errMsg != "" }/>
+				<p id="mfa-recovery" class="mt-1.5 text-sm text-ink-soft">{ p.T(i18n.AdminLoginRecoveryHint) }</p>
+			</div>
+			@formError(errMsg)
+			<button type="submit" class={ btn("lg"), "mt-6 inline-flex w-full bg-olive text-limewash hover:bg-olive-hover" }>
+				{ p.T(i18n.AdminLoginVerify) }
+			</button>
+		</form>
+		@logoutForm(p, "tap mt-3 inline-flex w-full items-center justify-center rounded-full text-sm font-medium text-olive underline underline-offset-4", false)
+	}
+}
+
+// PasswordData fills the password page.
+type PasswordData struct {
+	Forced bool
+	Error  string
+}
+
+templ AdminPassword(p AdminPage, d PasswordData) {
+	@AdminShell(p) {
+		<div class="max-w-md">
+			<h1 class="text-h2">{ p.T(i18n.AdminPasswordTitle) }</h1>
+			if d.Forced {
+				<p class="mt-3 rounded-card border border-oil bg-oil-soft/60 p-4 text-ink">{ p.T(i18n.AdminPasswordForced) }</p>
+			}
+			<form method="post" action="/admin/password" class="mt-6 space-y-4 rounded-card bg-white p-5 shadow-lift sm:p-6">
+				@csrfField(p)
+				// Lets password managers attach the new password to the right account.
+				<input type="email" name="username" autocomplete="username" value={ p.Email } readonly hidden/>
+				<div>
+					@fieldLabel("pw-current", p.T(i18n.AdminPasswordCurrent))
+					<input id="pw-current" name="current" type="password" autocomplete="current-password" dir="ltr" required maxlength="128" class="field-input"/>
+				</div>
+				<div>
+					@fieldLabel("pw-next", p.T(i18n.AdminPasswordNext))
+					<input id="pw-next" name="next" type="password" autocomplete="new-password" dir="ltr" required minlength="12" maxlength="128" aria-describedby="pw-hint" class="field-input"/>
+					<p id="pw-hint" class="mt-1.5 text-sm text-ink-soft">{ p.T(i18n.AdminPasswordHint) }</p>
+				</div>
+				<div>
+					@fieldLabel("pw-confirm", p.T(i18n.AdminPasswordConfirm))
+					<input id="pw-confirm" name="confirm" type="password" autocomplete="new-password" dir="ltr" required minlength="12" maxlength="128" class="field-input"/>
+				</div>
+				@formError(d.Error)
+				<button type="submit" class={ btn("md"), "inline-flex w-full bg-olive text-limewash hover:bg-olive-hover" }>
+					{ p.T(i18n.AdminPasswordSubmit) }
+				</button>
+			</form>
+		</div>
+	}
+}
+
+// SecurityData fills the security page.
+type SecurityData struct {
+	TOTPEnabled bool
+	// Enrollment is set while 2FA is being set up (QR code shown, code expected).
+	Enrollment *SecurityEnrollment
+	// RecoveryCodes are shown once, right after they are generated.
+	RecoveryCodes []string
+	RecoveryLeft  int64
+	// NeedsReauth asks for the password before 2FA changes (10 min window).
+	NeedsReauth bool
+	Error       string
+}
+
+// SecurityEnrollment is a pending TOTP secret.
+type SecurityEnrollment struct {
+	Secret string
+	QRData string
+}
+
+const secCard = "rounded-card bg-white p-5 shadow-lift ring-1 ring-sand-deep/50 sm:p-6"
+
+templ AdminSecurity(p AdminPage, d SecurityData) {
+	@AdminShell(p) {
+		<div class="max-w-xl space-y-g3">
+			<h1 class="text-h2">{ p.T(i18n.AdminSecurityTitle) }</h1>
+			if len(d.RecoveryCodes) > 0 {
+				@recoveryCodes(p, d.RecoveryCodes)
+			}
+			<section aria-labelledby="sec-2fa" class={ secCard }>
+				<div class="flex flex-wrap items-center justify-between gap-2">
+					<h2 id="sec-2fa" class="text-h3">{ p.T(i18n.AdminSecurityTwoFactor) }</h2>
+					if d.TOTPEnabled {
+						<span class="inline-flex items-center rounded-full bg-olive-600 px-2.5 py-0.5 text-xs font-bold text-limewash">{ p.T(i18n.AdminSecurityOn) }</span>
+					} else {
+						<span class="inline-flex items-center rounded-full bg-sand-deep px-2.5 py-0.5 text-xs font-bold text-ink-soft">{ p.T(i18n.AdminSecurityOff) }</span>
+					}
+				</div>
+				<p class="mt-2 text-sm text-ink-soft">{ p.T(i18n.AdminSecurityTwoFactorIntro) }</p>
+				if d.NeedsReauth {
+					@reauthForm(p, d.Error)
+				} else if d.Enrollment != nil {
+					@enrollForm(p, d.Enrollment, d.Error)
+				} else if d.TOTPEnabled {
+					<p class="mt-4 text-sm font-medium text-olive">{ p.T(i18n.AdminSecurityRecoveryLeft, "count", strconv.FormatInt(d.RecoveryLeft, 10)) }</p>
+					@formError(d.Error)
+					<div class="mt-4 flex flex-wrap gap-2">
+						<form method="post" action="/admin/security/recovery">
+							@csrfField(p)
+							<button type="submit" class={ btn("md", "whitespace-normal"), "inline-flex border border-olive/30 text-olive hover:bg-olive/5" }>{ p.T(i18n.AdminSecurityRegenerate) }</button>
+						</form>
+						<form method="post" action="/admin/security/totp/disable">
+							@csrfField(p)
+							<button type="submit" class={ btn("md", "whitespace-normal"), "inline-flex border border-danger/40 text-danger hover:bg-danger/5" }>{ p.T(i18n.AdminSecurityDisable) }</button>
+						</form>
+					</div>
+				} else {
+					@formError(d.Error)
+					<form method="post" action="/admin/security/totp/start" class="mt-4">
+						@csrfField(p)
+						<button type="submit" class={ btn("md", "whitespace-normal"), "inline-flex bg-olive text-limewash hover:bg-olive-hover" }>
+							@IconSmartphone("")
+							{ p.T(i18n.AdminSecurityEnable) }
+						</button>
+					</form>
+				}
+			</section>
+			<section aria-labelledby="sec-sessions" class={ secCard }>
+				<h2 id="sec-sessions" class="text-h3">{ p.T(i18n.AdminSecuritySessions) }</h2>
+				<p class="mt-2 text-sm text-ink-soft">{ p.T(i18n.AdminSecuritySessionsHint) }</p>
+				<form method="post" action="/admin/security/signout-others" class="mt-4">
+					@csrfField(p)
+					<button type="submit" class={ btn("md", "whitespace-normal"), "inline-flex border border-olive/30 text-olive hover:bg-olive/5" }>
+						@IconLogOut("")
+						{ p.T(i18n.AdminSecuritySignOutOthers) }
+					</button>
+				</form>
+			</section>
+		</div>
+	}
+}
+
+templ reauthForm(p AdminPage, errMsg string) {
+	<form method="post" action="/admin/security/reauth" class="mt-4 rounded-card bg-sand/50 p-4">
+		@csrfField(p)
+		<input type="email" name="username" autocomplete="username" value={ p.Email } readonly hidden/>
+		<h3 class="font-bold text-olive">{ p.T(i18n.AdminSecurityReauthTitle) }</h3>
+		<p class="mt-1 text-sm text-ink-soft">{ p.T(i18n.AdminSecurityReauthHint) }</p>
+		<div class="mt-3">
+			@fieldLabel("reauth-password", p.T(i18n.AdminLoginPassword))
+			<input id="reauth-password" name="password" type="password" autocomplete="current-password" dir="ltr" required maxlength="128" class="field-input"/>
+		</div>
+		@formError(errMsg)
+		<button type="submit" class={ btn("md"), "mt-4 inline-flex bg-olive text-limewash hover:bg-olive-hover" }>{ p.T(i18n.AdminSecurityReauthSubmit) }</button>
+	</form>
+}
+
+templ enrollForm(p AdminPage, e *SecurityEnrollment, errMsg string) {
+	<div class="mt-4 space-y-4">
+		<p class="text-sm text-ink">{ p.T(i18n.AdminSecurityScan) }</p>
+		<img src={ templ.SafeURL(e.QRData) } width="240" height="240" alt={ p.T(i18n.AdminSecurityQrAlt) } class="mx-auto size-60 rounded-lg bg-white p-2 ring-1 ring-sand-deep [image-rendering:pixelated]"/>
+		<div>
+			<p class="text-sm text-ink-soft">{ p.T(i18n.AdminSecurityManual) }</p>
+			<code dir="ltr" class="mt-1 block rounded-lg bg-sand/60 p-3 text-center font-mono text-sm break-all select-all">{ e.Secret }</code>
+		</div>
+		<form method="post" action="/admin/security/totp/enable">
+			@csrfField(p)
+			@fieldLabel("enroll-code", p.T(i18n.AdminSecurityCodeLabel))
+			<input id="enroll-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]*" dir="ltr" required maxlength="8" class="field-input text-center text-xl tracking-[0.3em] tabular-nums" aria-invalid?={ errMsg != "" }/>
+			@formError(errMsg)
+			<button type="submit" class={ btn("md", "whitespace-normal"), "mt-4 inline-flex w-full bg-olive text-limewash hover:bg-olive-hover" }>{ p.T(i18n.AdminSecurityConfirm) }</button>
+		</form>
+		<form method="post" action="/admin/security/totp/cancel">
+			@csrfField(p)
+			<button type="submit" class="tap inline-flex w-full items-center justify-center rounded-full text-sm font-medium text-olive underline underline-offset-4">{ p.T(i18n.AdminSecurityCancelSetup) }</button>
+		</form>
+	</div>
+}
+
+templ recoveryCodes(p AdminPage, codes []string) {
+	<section aria-labelledby="sec-codes" class="rounded-card border-2 border-oil bg-oil-soft/50 p-5 sm:p-6">
+		<h2 id="sec-codes" class="text-h3">{ p.T(i18n.AdminSecurityRecoveryTitle) }</h2>
+		<p class="mt-2 text-sm text-ink">{ p.T(i18n.AdminSecurityRecoveryIntro) }</p>
+		<ul dir="ltr" class="mt-4 grid grid-cols-2 gap-2 font-mono text-base tabular-nums select-all">
+			for _, c := range codes {
+				<li class="rounded-lg bg-white px-3 py-2 text-center">{ c }</li>
+			}
+		</ul>
+		<a href="/admin/security" class={ btn("md"), "mt-4 inline-flex bg-olive text-limewash hover:bg-olive-hover" }>{ p.T(i18n.AdminSecurityDone) }</a>
+	</section>
+}

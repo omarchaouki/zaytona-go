@@ -1,0 +1,129 @@
+package view
+
+import (
+	"fmt"
+	"strconv"
+
+	"github.com/omarchaouki/zaytona-go/internal/domain"
+)
+
+// Picture: AVIF first, WebP fallback, intrinsic size (no layout shift).
+// priority marks the LCP image (eager, high fetch priority).
+templ Picture(img Image, alt, sizes string, priority bool, class, imgClass string) {
+	if img.Valid() {
+		<picture class={ class }>
+			<source type="image/avif" srcset={ img.AVIFSrcSet } sizes={ sizes }/>
+			<img
+				src={ img.Fallback }
+				srcset={ img.WebPSrcSet }
+				sizes={ sizes }
+				alt={ alt }
+				width={ strconv.Itoa(img.Width) }
+				height={ strconv.Itoa(img.Height) }
+				if priority {
+					loading="eager"
+					fetchpriority="high"
+					decoding="sync"
+				} else {
+					loading="lazy"
+					decoding="async"
+				}
+				class={ "block h-full w-full object-cover", imgClass }
+			/>
+		</picture>
+	}
+}
+
+// StageShot is one photograph of a stage; Key matches the data-stage of the
+// sections it accompanies.
+type StageShot struct {
+	Key   string
+	Image Image
+	Alt   string
+	Pos   string // pos-50-30 ... (object position, CSP-safe class)
+}
+
+// Stage: the fixed half of the split stage. Its photographs are stacked and
+// the one of the chapter on screen is shown (landing.js); the first one is
+// the LCP image and shows without JS. caption ("" hides it) names the place.
+templ Stage(shots []StageShot, caption string) {
+	<div class="stage" data-stage-photos>
+		<div class="stage-frame">
+			for i, s := range shots {
+				if s.Image.Valid() {
+					<div class={ "stage-photo drift", s.Pos } data-stage-shot={ s.Key } data-on?={ i == 0 } aria-hidden?={ s.Alt == "" }>
+						@Picture(s.Image, s.Alt, HeroImageSizes, i == 0, "block h-full w-full", "")
+					</div>
+				}
+			}
+			if caption != "" {
+				<p class="stage-caption">{ caption }</p>
+			}
+		</div>
+	</div>
+}
+
+// SectionHeading: h2 and intro (the eyebrow argument is ignored: no labels above headings).
+templ SectionHeading(id, eyebrow, title, intro, class string) {
+	<div class={ class }>
+		<h2 id={ id } class="text-step-head">{ title }</h2>
+		if intro != "" {
+			<p class="mt-6 max-w-[46ch] text-step-body">{ intro }</p>
+		}
+	</div>
+}
+
+// Emphasis renders "plain *highlighted* plain" with the accent class on the highlights.
+templ Emphasis(text, class string) {
+	for _, part := range domain.SplitEmphasis(text) {
+		if part.Highlighted {
+			<em class={ "not-italic", class }>{ part.Text }</em>
+		} else {
+			{ part.Text }
+		}
+	}
+}
+
+const starPath = "M12 2.6l2.83 5.95 6.53.78-4.82 4.5 1.25 6.46L12 17.1l-5.79 3.19 1.25-6.46-4.82-4.5 6.53-.78L12 2.6z"
+
+// Stars: read-only, partial fill for averages (4.7 -> 4 full + 70%), filling
+// from the reading start. idPrefix keeps gradient ids unique on the page.
+templ Stars(value float64, size, label, idPrefix, class string) {
+	<span role="img" aria-label={ label } class={ "inline-flex items-center gap-0.5", class }>
+		for i := range 5 {
+			<svg viewBox="0 0 24 24" class={ starSize(size), "rtl:-scale-x-100" } aria-hidden="true">
+				<defs>
+					<linearGradient id={ fmt.Sprintf("%s-%d", idPrefix, i) }>
+						<stop offset={ starOffset(value, i) } stop-color="var(--color-oil)"></stop>
+						<stop offset={ starOffset(value, i) } stop-color="var(--color-sand-deep)"></stop>
+					</linearGradient>
+				</defs>
+				<path d={ starPath } fill={ fmt.Sprintf("url(#%s-%d)", idPrefix, i) }></path>
+			</svg>
+		}
+	</span>
+}
+
+func starSize(size string) string {
+	switch size {
+	case "sm":
+		return "size-4"
+	case "lg":
+		return "size-7"
+	}
+	return "size-5"
+}
+
+func starOffset(value float64, i int) string {
+	fill := min(max(value-float64(i), 0), 1)
+	return strconv.FormatFloat(fill*100, 'f', -1, 64) + "%"
+}
+
+// staggerClass maps seconds to the nearest stagger-NN class (0.05 s steps, max 3 s).
+func staggerClass(seconds float64) string {
+	n := int(seconds/0.05 + 0.5)
+	if n <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("stagger-%02d", min(n, 60)*5)
+}

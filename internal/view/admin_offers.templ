@@ -1,0 +1,197 @@
+package view
+
+import (
+	"github.com/shopspring/decimal"
+
+	"github.com/omarchaouki/zaytona-go/internal/i18n"
+)
+
+// OffersData fills Admin > Offers and prices.
+type OffersData struct {
+	PricePerLiter  string // "" when not set
+	PerLiter       *decimal.Decimal
+	CustomEnabled  bool
+	CustomMin      string
+	CustomMax      string
+	PriceIsDemo    bool
+	Offers         []OfferRow
+	Form           *FormState
+	UploadMB       string
+	OpenNew        bool
+}
+
+// OfferRow is one offer in the editor.
+type OfferRow struct {
+	ID, NameAr, NameFr, TaglineAr, TaglineFr string
+	Liters                                   decimal.Decimal
+	Price                                    decimal.Decimal
+	AutoPrice, Active, Demo                  bool
+	SortOrder                                int32
+	Image                                    Image
+	HasImage                                 bool
+}
+
+func (o OfferRow) litersText() string { return o.Liters.String() }
+
+func (p AdminPage) offerName(o OfferRow) string {
+	if p.Locale == i18n.AR {
+		return o.NameAr
+	}
+	return o.NameFr
+}
+
+func (d OffersData) autoPreview(p AdminPage, liters decimal.Decimal) string {
+	if d.PerLiter == nil {
+		return p.T(i18n.AdminOffersErrorNoPrice)
+	}
+	total := liters.Mul(*d.PerLiter).Round(2)
+	return p.T(i18n.AdminOffersAutoPreview, "liters", liters.String(), "perLiter", p.mad(*d.PerLiter), "total", p.mad(total))
+}
+
+templ AdminOffers(p AdminPage, d OffersData) {
+	@AdminShell(p) {
+		<div class="max-w-3xl">
+			<h1 class="text-h2">{ p.T(i18n.AdminOffersTitle) }</h1>
+			<p class="mt-g1 text-ink-soft">{ p.T(i18n.AdminOffersIntro) }</p>
+			@OwnerNote(p)
+			@pricingCard(p, d, d.Form.For("pricing"))
+			<h2 class="mt-g4 text-h3">{ p.T(i18n.AdminOffersOffersTitle) }</h2>
+			<ul class="mt-g2 space-y-g2">
+				if len(d.Offers) == 0 {
+					<li class="rounded-card border-2 border-dashed border-sand-deep p-g4 text-center text-ink-soft">{ p.T(i18n.AdminOffersEmpty) }</li>
+				}
+				for _, o := range d.Offers {
+					@adminOfferCard(p, d, o)
+				}
+			</ul>
+			if p.Owner {
+				<details class="mt-g3" open?={ d.OpenNew || d.Form.For("new").Posted() }>
+					<summary class={ btn("md"), "inline-flex cursor-pointer list-none bg-olive text-limewash hover:bg-olive-hover [&::-webkit-details-marker]:hidden" }>
+						@IconPlus("")
+						{ p.T(i18n.AdminOffersAdd) }
+					</summary>
+					<div class="mt-g2 rounded-card bg-white p-g3 shadow-lift ring-2 ring-oil">
+						@offerForm(p, d, OfferRow{NameAr: "زيت الزيتون البكر الممتاز", NameFr: "Huile d’olive vierge extra", AutoPrice: true, Active: true, SortOrder: 100}, "new", "/admin/offers", d.Form.For("new"))
+					</div>
+				</details>
+			}
+			if p.Owner {
+				@ConfirmDialog(p, "confirm-offer", p.T(i18n.AdminCommonDeleteTitle), p.T(i18n.AdminOffersDeleteConfirm))
+			}
+		</div>
+	}
+}
+
+templ pricingCard(p AdminPage, d OffersData, s *FormState) {
+	<form method="post" action="/admin/offers/pricing" class={ "mt-g3", adminCard }>
+		@csrfField(p)
+		<div class="flex items-center gap-g1">
+			<span class="flex size-10 items-center justify-center rounded-full bg-olive-950 text-oil-bright">
+				@IconDroplets("size-5")
+			</span>
+			<h2 class="text-h3">{ p.T(i18n.AdminOffersPricingTitle) }</h2>
+		</div>
+		if d.PriceIsDemo {
+			<p class="mt-g2 rounded-field bg-oil-soft/70 px-3 py-2 text-sm font-medium text-oil-deep">{ p.T(i18n.AdminOffersDemoPrice) }</p>
+		}
+		<fieldset disabled?={ !p.Owner } class="mt-g2 grid gap-g2 sm:grid-cols-2">
+			@Input("pricing", Field{Name: "pricePerLiter", Label: p.T(i18n.AdminOffersPricePerLiter) + " (" + p.T(i18n.AdminOffersMadPerLiter) + ")", Hint: p.T(i18n.AdminOffersPricePerLiterHint), Dir: "ltr", Mode: "decimal", Required: true, Max: 12, Class: "sm:col-span-2"}, d.PricePerLiter, s)
+			@Checkbox("customEnabled", p.T(i18n.AdminOffersCustomEnabled), s.Checked("customEnabled", d.CustomEnabled), "sm:col-span-2")
+			@Input("pricing", Field{Name: "customMin", Label: p.T(i18n.AdminOffersCustomMin), Dir: "ltr", Mode: "numeric", Required: true, Max: 4}, d.CustomMin, s)
+			@Input("pricing", Field{Name: "customMax", Label: p.T(i18n.AdminOffersCustomMax), Dir: "ltr", Mode: "numeric", Required: true, Max: 4}, d.CustomMax, s)
+		</fieldset>
+		<div class="mt-g2 space-y-2">
+			@SaveRow(p, p.T(i18n.AdminOffersSave), s.E("form"), "")
+		</div>
+	</form>
+}
+
+templ adminOfferCard(p AdminPage, d OffersData, o OfferRow) {
+	<li class={ adminCard, templ.KV("opacity-75", !o.Active) }>
+		<div class="flex flex-wrap items-center gap-g2">
+			if o.HasImage {
+				@Picture(o.Image, "", "64px", false, "size-16 shrink-0 overflow-hidden rounded-card", "size-16 object-cover")
+			} else {
+				<span class="flex size-16 shrink-0 flex-col items-center justify-center rounded-card bg-olive-950 text-oil-bright">
+					<span class="font-display text-xl leading-none font-bold tabular-nums">{ o.litersText() }</span>
+					<span class="text-xs">{ p.T(i18n.OrderFormLitersUnit) }</span>
+				</span>
+			}
+			<div class="min-w-0 flex-1">
+				<p class="font-bold text-olive">{ p.offerName(o) }</p>
+				<p class="mt-0.5 text-lg font-bold tabular-nums">{ p.mad(o.Price) }</p>
+				<div class="mt-1 flex flex-wrap gap-1.5 text-xs font-medium">
+					<span class="rounded-full bg-olive/[0.08] px-2 py-0.5 text-olive-600">
+						if o.AutoPrice {
+							{ p.T(i18n.AdminOffersPriceAuto) }
+						} else {
+							{ p.T(i18n.AdminOffersPriceFixed) }
+						}
+					</span>
+					if !o.Active {
+						<span class="inline-flex items-center gap-1 rounded-full bg-sand px-2 py-0.5 text-ink-soft">
+							@IconEyeOff("size-3")
+							{ p.T(i18n.AdminOffersHidden) }
+						</span>
+					}
+					if o.Demo {
+						<span class="rounded-full bg-ink/80 px-2 py-0.5 text-limewash">{ p.T(i18n.AdminOffersDemo) }</span>
+					}
+				</div>
+			</div>
+			if p.Owner {
+				@DeleteButton(p, "/admin/offers/"+o.ID+"/delete", p.T(i18n.AdminOffersDeleteLabel, "name", o.litersText()+" L"), "confirm-offer")
+			}
+		</div>
+		if p.Owner {
+			<details class="mt-g2 border-t border-sand-deep/60 pt-g1" open?={ d.Form.For(o.ID).Posted() }>
+				<summary class="tap inline-flex cursor-pointer list-none items-center gap-1.5 rounded-full px-2 text-sm font-medium text-olive hover:bg-sand [&::-webkit-details-marker]:hidden">
+					@IconPencil("size-4")
+					{ p.T(i18n.AdminOffersEditLabel, "name", o.litersText()+" L") }
+				</summary>
+				<div class="mt-g2">
+					@offerForm(p, d, o, o.ID, "/admin/offers/"+o.ID, d.Form.For(o.ID))
+				</div>
+			</details>
+		}
+	</li>
+}
+
+templ offerForm(p AdminPage, d OffersData, o OfferRow, key, action string, s *FormState) {
+	<form method="post" action={ templ.SafeURL(action) } enctype="multipart/form-data" class="grid gap-g2 sm:grid-cols-2">
+		@csrfField(p)
+		@Input(key, Field{Name: "liters", Label: p.T(i18n.AdminOffersLiters), Dir: "ltr", Mode: "decimal", Required: true, Max: 8}, o.litersText(), s)
+		@Input(key, Field{Name: "sortOrder", Label: p.T(i18n.AdminOffersSortOrder), Dir: "ltr", Mode: "numeric", Max: 4}, int32String(o.SortOrder), s)
+		@Input(key, Field{Name: "nameAr", Label: p.T(i18n.AdminOffersNameAr), Dir: "rtl", Required: true, Max: 120}, o.NameAr, s)
+		@Input(key, Field{Name: "nameFr", Label: p.T(i18n.AdminOffersNameFr), Dir: "ltr", Required: true, Max: 120}, o.NameFr, s)
+		<fieldset class="sm:col-span-2">
+			<legend class="mb-1.5 block font-medium text-olive">{ p.T(i18n.AdminOffersPriceMode) }</legend>
+			<div class="grid gap-2 sm:grid-cols-2">
+				<label class="flex cursor-pointer items-start gap-2 rounded-field border-2 border-sand-deep p-3 has-[:checked]:border-oil has-[:checked]:bg-oil/10">
+					<input type="radio" name="mode" value="auto" checked?={ s.V("mode", modeOf(o.AutoPrice)) == "auto" } class="mt-1 size-4 accent-olive"/>
+					<span>
+						<span class="block font-medium">{ p.T(i18n.AdminOffersPriceAuto) }</span>
+						<span class="block text-sm text-ink-soft tabular-nums">{ d.autoPreview(p, o.Liters) }</span>
+					</span>
+				</label>
+				<label class="flex cursor-pointer items-start gap-2 rounded-field border-2 border-sand-deep p-3 has-[:checked]:border-oil has-[:checked]:bg-oil/10">
+					<input type="radio" name="mode" value="fixed" checked?={ s.V("mode", modeOf(o.AutoPrice)) == "fixed" } class="mt-1 size-4 accent-olive"/>
+					<span class="block font-medium">{ p.T(i18n.AdminOffersPriceFixed) }</span>
+				</label>
+			</div>
+		</fieldset>
+		@Input(key, Field{Name: "price", Label: p.T(i18n.AdminOffersPrice) + " (" + p.T(i18n.AdminOffersPriceFixed) + ")", Dir: "ltr", Mode: "decimal", Max: 12, Class: "sm:col-span-2"}, o.Price.StringFixed(2), s)
+		@Input(key, Field{Name: "taglineAr", Label: p.T(i18n.AdminOffersTaglineAr), Dir: "rtl", Max: 200}, o.TaglineAr, s)
+		@Input(key, Field{Name: "taglineFr", Label: p.T(i18n.AdminOffersTaglineFr), Dir: "ltr", Max: 200}, o.TaglineFr, s)
+		<div class="sm:col-span-2">
+			@PhotoInput(p, key, "photo", p.T(i18n.AdminOffersPhoto), p.T(i18n.AdminCommonPhotoHint, "mb", d.UploadMB), s.E("photo"))
+			if o.HasImage {
+				@Checkbox("removePhoto", p.T(i18n.AdminCommonRemovePhoto), false, "mt-1")
+			}
+		</div>
+		@Checkbox("isActive", p.T(i18n.AdminOffersActive), s.Checked("isActive", o.Active), "sm:col-span-2")
+		<div class="space-y-2 sm:col-span-2">
+			@SaveRow(p, p.T(i18n.AdminOffersSave), s.E("form"), p.T(i18n.AdminCommonUploading))
+		</div>
+	</form>
+}

@@ -1,0 +1,14 @@
+.git
+.env
+.env.*
+!.env.example
+.data
+uploads
+bin
+tools/bin
+web/static/dist/*
+tests/e2e/screenshots
+.lighthouseci
+.claude
+*.md
+!README.md

@@ -1,0 +1,137 @@
+package view
+
+import "github.com/omarchaouki/zaytona-go/internal/i18n"
+
+// Document is the HTML shell of every public page. No inline styles; every
+// script carries the request nonce. head (may be nil) ends <head>; children is <body>.
+templ Document(p Page, head templ.Component) {
+	<!DOCTYPE html>
+	<html lang={ p.Meta().HTMLLang } dir={ p.Meta().Dir }>
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+			<meta name="theme-color" content="#ddd6c6"/>
+			<meta name="format-detection" content="telephone=no"/>
+			<title>{ p.Title }</title>
+			if p.Description != "" {
+				<meta name="description" content={ p.Description }/>
+			}
+			if p.NoIndex {
+				<meta name="robots" content="noindex, nofollow"/>
+			}
+			if p.NoReferrer {
+				<meta name="referrer" content="no-referrer"/>
+			}
+			if p.Canonical != "" {
+				<link rel="canonical" href={ p.Canonical }/>
+			}
+			for _, l := range i18n.Locales {
+				if href, ok := p.Alternates[l]; ok {
+					<link rel="alternate" hreflang={ string(l) } href={ href }/>
+				}
+			}
+			if href, ok := p.Alternates[i18n.Default]; ok {
+				<link rel="alternate" hreflang="x-default" href={ href }/>
+			}
+			<meta property="og:locale" content={ p.Meta().OGLocale }/>
+			<meta property="og:type" content="website"/>
+			<meta property="og:site_name" content={ p.SiteName() }/>
+			<meta property="og:title" content={ p.Title }/>
+			if p.Description != "" {
+				<meta property="og:description" content={ p.Description }/>
+			}
+			if p.Canonical != "" {
+				<meta property="og:url" content={ p.Canonical }/>
+			}
+			if p.OGImage != "" {
+				<meta property="og:image" content={ p.OGImage }/>
+				<meta property="og:image:width" content="1200"/>
+				<meta property="og:image:height" content="630"/>
+			}
+			<meta name="twitter:card" content="summary_large_image"/>
+			for _, f := range p.PreloadFonts() {
+				<link rel="preload" as="font" type="font/woff2" href={ f } crossorigin="anonymous"/>
+			}
+			if p.Preload != nil && p.Preload.Valid() {
+				<link rel="preload" as="image" type="image/avif" imagesrcset={ p.Preload.AVIFSrcSet } imagesizes={ p.PreloadSizes } fetchpriority="high"/>
+			}
+			<link rel="stylesheet" href={ p.Asset("css/app.css") }/>
+			<link rel="icon" href={ p.Asset("favicon.svg") } type="image/svg+xml"/>
+			<script nonce={ p.Nonce }>document.documentElement.classList.add('js')</script>
+			if p.Script != "" {
+				<script type="module" nonce={ p.Nonce } src={ p.Asset(p.Script) }></script>
+			}
+			if head != nil {
+				@head
+			}
+		</head>
+		{ children... }
+	</html>
+}
+
+// SiteLayout wraps a public page with the skip link, header and footer.
+// headExtra goes at the end of <head> (JSON-LD).
+templ SiteLayout(p Page, headExtra templ.Component) {
+	@Document(p, headExtra) {
+		<body
+			class="olive-texture text-step-body"
+			if p.PixelID() != "" {
+				data-pixel-id={ p.PixelID() }
+				data-pixel-consent?={ p.Settings.Marketing.RequireConsent }
+			}
+		>
+			<a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:start-3 focus:top-3 focus:z-50 focus:bg-olive focus:px-4 focus:py-2 focus:text-white">
+				{ p.T(i18n.NavSkipToContent) }
+			</a>
+			@SiteHeader(p)
+			<main id="main">
+				{ children... }
+			</main>
+			@SiteFooter(p)
+			if p.FloatingWA {
+				@FloatingWhatsApp(p)
+			}
+			if p.MobileBar {
+				@MobileOrderBar(p)
+			}
+			if p.PixelID() != "" && p.Settings.Marketing.RequireConsent {
+				@ConsentBar(p)
+			}
+		</body>
+	}
+}
+
+// SiteHeader: a plain bar on the ground. Wordmark, three section links,
+// the other language, one action. From tablets up it stays on screen, so
+// "Order" is always one click away (phones have the bottom order bar).
+templ SiteHeader(p Page) {
+	<header class="olive-texture relative z-30 pt-[env(safe-area-inset-top)] md:sticky md:top-0">
+		<div class="container-page flex h-[4.5rem] items-center gap-5">
+			<a href={ templ.SafeURL(p.HomeHref()) } class="tap -ms-1 flex min-w-0 flex-col justify-center ps-1 pe-2 leading-tight" aria-label={ p.T(i18n.BrandHomeLink) }>
+				<span class="font-display font-medium">{ p.SiteName() }</span>
+				<span class="text-step-small text-ink-soft">{ p.T(i18n.BrandPlace) }</span>
+			</a>
+			<nav aria-label={ p.T(i18n.NavMain) } class="ms-auto hidden items-center gap-1 lg:flex">
+				<a href={ templ.SafeURL(p.SectionHref("#offers")) } class={ headerLink }>{ p.T(i18n.NavOffers) }</a>
+				<a href={ templ.SafeURL(p.SectionHref("#onssa")) } class={ headerLink }>{ p.T(i18n.NavOnssa) }</a>
+				<a href={ templ.SafeURL(p.SectionHref("#faq")) } class={ headerLink }>{ p.T(i18n.NavFaq) }</a>
+			</nav>
+			<nav aria-label={ p.T(i18n.NavLanguage) } class="ms-auto lg:ms-0">
+				<a
+					href={ templ.SafeURL(p.SwitchHref) }
+					hreflang={ string(p.Locale.Other()) }
+					lang={ p.Locale.Other().Meta().HTMLLang }
+					aria-label={ p.T(i18n.NavSwitchToLabel) }
+					class={ headerLink, "font-medium" }
+				>
+					{ p.T(i18n.NavSwitchTo) }
+				</a>
+			</nav>
+			<a href={ templ.SafeURL(p.SectionHref("#order")) } class={ btn("md"), actFill, "hidden sm:inline-flex" }>
+				{ p.T(i18n.NavOrderNow) }
+			</a>
+		</div>
+	</header>
+}
+
+const headerLink = "tap inline-flex items-center px-3 underline-offset-[6px] decoration-2 decoration-olive hover:underline"

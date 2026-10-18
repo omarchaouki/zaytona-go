@@ -1,0 +1,114 @@
+package view
+
+import (
+	"strconv"
+
+	"github.com/omarchaouki/zaytona-go/internal/i18n"
+)
+
+// Confirmation is the page after an order (signed link, noindex, no-referrer):
+// a drawn check, the thanks, the reference on a cut slip, then the summary.
+templ Confirmation(p Page, d ConfirmationData) {
+	@SiteLayout(p, nil) {
+		if !d.Found {
+			<div class="container-page max-w-3xl py-16 md:py-24">
+				<h1 class="text-step-head max-w-[20ch]">{ p.T(i18n.ConfirmationNotFoundTitle) }</h1>
+				<p class="mt-6 max-w-[46ch]">{ p.T(i18n.ConfirmationNotFoundBody) }</p>
+				<div class="mt-10 flex flex-wrap items-center gap-x-8 gap-y-3">
+					<a href={ templ.SafeURL(p.HomeHref()) } class={ btn("md"), actPrimary }>{ p.T(i18n.ConfirmationBackHome) }</a>
+					@WALink(p, "confirmation", "", textLink, "") {
+						@WhatsAppIcon("size-5 text-whatsapp-deep")
+						{ p.T(i18n.FaqMoreLink) }
+					}
+				</div>
+			</div>
+		} else {
+			<div class="container-page max-w-3xl py-12 md:py-20" data-lead={ d.Reference } data-lead-value={ d.LeadValue } data-lead-content={ d.LeadContent }>
+				<div data-reveal>
+					// The check draws itself once (static under reduced motion).
+					<svg viewBox="0 0 52 52" class="size-14 text-olive" aria-hidden="true">
+						<circle cx="26" cy="26" r="23" fill="none" stroke="currentColor" stroke-width="3" pathLength="1" class="draw"></circle>
+						<path d="M15 27l7 7 15-16" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="square" pathLength="1" class="draw stagger-50"></path>
+					</svg>
+					<h1 class="mt-6 text-step-head max-w-[22ch]">{ p.T(i18n.ConfirmationTitle, "name", d.FirstName) }</h1>
+					<p class="mt-6 max-w-[40ch] text-step-lead">
+						if p.WAHref("") != "" {
+							{ p.T(i18n.ConfirmationNext) }
+						} else {
+							{ p.T(i18n.ConfirmationNextNoWhatsapp) }
+						}
+					</p>
+					// The order number on a cut slip, with a copy button.
+					<div class="sheet cut-bottom mt-8 flex w-full max-w-sm items-center justify-between gap-3 rounded-t-3xl px-5 pt-4 pb-6">
+						<div class="min-w-0">
+							<p class="text-step-small text-ink-soft">{ p.T(i18n.ConfirmationReferenceLabel) }</p>
+							<p class="text-step-lead font-semibold tabular-nums" dir="ltr">{ d.Reference }</p>
+						</div>
+						<button type="button" hidden data-copy={ d.Reference } data-copied-label={ p.T(i18n.ConfirmationCopied) } class="btn-press tap inline-flex shrink-0 items-center gap-1.5 rounded-full bg-sand px-3 text-step-small font-medium hover:bg-sand-deep/70">
+							@IconCopy("size-4")
+							<span aria-live="polite" data-copy-label>{ p.T(i18n.ConfirmationCopy) }</span>
+						</button>
+					</div>
+				</div>
+				<div class="stagger-15 mt-10 flex flex-col gap-3 sm:flex-row" data-reveal>
+					@WALink(p, "confirmation", d.WhatsAppText, btn("lg")+" btn-press inline-flex bg-whatsapp text-whatsapp-ink hover:brightness-95", "") {
+						@WhatsAppIcon("")
+						{ p.T(i18n.ConfirmationWhatsapp) }
+					}
+					if phone := p.FirstPhone(); phone != "" {
+						<a href={ templ.SafeURL("tel:" + phone) } class={ btn("lg"), actSecondary }>
+							@IconPhone("")
+							{ p.T(i18n.OrderByPhone) }
+						</a>
+					}
+				</div>
+				<section aria-labelledby="summary-title" data-reveal class="stagger-30 sheet mt-12 rounded-3xl p-6 sm:p-8">
+					<h2 id="summary-title" class="text-step-lead">{ p.T(i18n.ConfirmationSummary) }</h2>
+					<ul class="mt-4 space-y-2">
+						for _, l := range d.Lines {
+							<li class="flex justify-between gap-4">
+								<span class="min-w-0">{ l.Label }</span>
+								<span class="shrink-0 font-medium tabular-nums" dir="ltr">× { strconv.Itoa(l.Quantity) }</span>
+							</li>
+						}
+					</ul>
+					<dl class="mt-4 space-y-1.5 border-t border-sand-deep pt-4">
+						<div class="flex justify-between gap-4">
+							<dt class="text-ink-soft">{ p.T(i18n.ConfirmationCity) }</dt>
+							<dd>{ d.City }</dd>
+						</div>
+						<div class="flex justify-between gap-4">
+							<dt class="text-ink-soft">{ p.T(i18n.OrderFormDelivery) }</dt>
+							<dd class="tabular-nums">{ d.DeliveryText }</dd>
+						</div>
+						<div class="flex items-baseline justify-between gap-4 pt-1">
+							<dt class="font-semibold">{ d.TotalLabel }</dt>
+							<dd class="text-step-lead tabular-nums">{ d.Total }</dd>
+						</div>
+					</dl>
+					<p class="mt-4 rounded-2xl bg-sand p-4">{ d.PayText }</p>
+				</section>
+				<p class="mt-8 max-w-[52ch] text-step-small text-ink-soft">{ p.T(i18n.ConfirmationKeepReference) }</p>
+				<a href={ templ.SafeURL(p.HomeHref()) } class={ textLink, "mt-6" }>{ p.T(i18n.ConfirmationBackHome) }</a>
+			</div>
+		}
+	}
+}
+
+// ConsentBar asks before loading the Meta Pixel (when the owner chose so).
+// Hidden until the script finds no stored choice.
+templ ConsentBar(p Page) {
+	<section data-consent hidden aria-label={ p.T(i18n.ConsentLabel) } class="notify-in fixed inset-x-3 bottom-3 z-50 rounded-3xl bg-olive-950 p-g2 text-limewash shadow-float sm:inset-x-auto sm:end-4 sm:w-[24rem]">
+		<p class="flex items-start gap-2 text-sm">
+			@IconCookie("mt-0.5 size-4 shrink-0 text-oil-bright")
+			<span>
+				{ p.T(i18n.ConsentBody) + " " }
+				<a href={ templ.SafeURL(p.LocalHref("/privacy")) } class="font-medium text-oil-bright underline underline-offset-2">{ p.T(i18n.ConsentMore) }</a>
+			</span>
+		</p>
+		<div class="mt-g1 flex gap-2">
+			<button type="button" data-consent-choice="granted" class={ btn("md"), actOnField, "flex-1" }>{ p.T(i18n.ConsentAccept) }</button>
+			<button type="button" data-consent-choice="denied" class={ btn("md"), "inline-flex flex-1 text-limewash hover:bg-limewash/10" }>{ p.T(i18n.ConsentDecline) }</button>
+		</div>
+	</section>
+}

@@ -1,0 +1,32 @@
+{
+  "grove-green": {
+    "widths": [480, 960, 1008],
+    "width": 1008,
+    "height": 509
+  },
+  "grove-panorama": {
+    "widths": [480, 960, 1600, 1920],
+    "width": 1920,
+    "height": 650
+  },
+  "grove-path": {
+    "widths": [480, 960, 1600],
+    "width": 1600,
+    "height": 1066
+  },
+  "oil-pour": {
+    "widths": [453],
+    "width": 453,
+    "height": 453
+  },
+  "olives-golden-hour": {
+    "widths": [480, 960, 1600],
+    "width": 1600,
+    "height": 900
+  },
+  "olives-harvest": {
+    "widths": [480, 750],
+    "width": 750,
+    "height": 1029
+  }
+}

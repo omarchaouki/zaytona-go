@@ -1,0 +1,279 @@
+package view
+
+import "github.com/omarchaouki/zaytona-go/internal/i18n"
+
+// Reviews: the average at figure size with partial stars, the per-star bars
+// (links that filter the list, fetched in place with JS), then each review set
+// as a short letter signed by its writer, with verified and example marks,
+// photo lightbox and the mill's reply. Only reviews the admin approved are
+// listed; the numbers come from real reviews alone.
+templ ReviewsSection(p Page, d ReviewsData) {
+	<section id="reviews" aria-labelledby="reviews-title" class="section-y scroll-mt-4">
+		<div class="container-page grid gap-12 lg:grid-cols-[minmax(0,4fr)_minmax(0,7fr)] lg:gap-20 [&>*]:min-w-0">
+			<div class="lg:sticky lg:top-8 lg:self-start" data-reveal>
+				<h2 id="reviews-title" class="text-step-head max-w-[14ch]">{ p.T(i18n.ReviewsTitle) }</h2>
+				if s := d.Summary; s != nil {
+					<div class="mt-10 flex flex-wrap items-end gap-x-5 gap-y-2">
+						<p class="text-step-figure">{ s.AverageText }</p>
+						<div class="pb-2">
+							@Stars(s.Average, "lg", p.T(i18n.ReviewsStarsLabel, "rating", s.AverageText), "rv-sum", "")
+							<p class="mt-1 text-step-small text-ink-soft">{ p.T(i18n.ReviewsBasedOn, "count", s.CountText) }</p>
+						</div>
+					</div>
+					<ul class="mt-6 max-w-[24rem]">
+						for _, b := range s.Bars {
+							<li>
+								if b.Count > 0 {
+									<a
+										href={ templ.SafeURL(b.Href) }
+										data-review-filter={ itoa(b.Stars) }
+										aria-current?={ b.Active }
+										aria-label={ p.T(i18n.ReviewsDistributionLabel, "stars", itoa(b.Stars), "count", i64(b.Count)) }
+										class={ "flex min-h-11 w-full items-center gap-3 rounded-xl px-2 text-step-small transition-colors hover:bg-sand", templ.KV("bg-sand", b.Active) }
+									>
+										@reviewBar(b)
+									</a>
+								} else {
+									<div aria-label={ p.T(i18n.ReviewsDistributionLabel, "stars", itoa(b.Stars), "count", "0") } role="img" class="flex min-h-11 w-full items-center gap-3 px-1 text-step-small">
+										@reviewBar(b)
+									</div>
+								}
+							</li>
+						}
+					</ul>
+				}
+				<div class="mt-8">
+					<p class="text-ink-soft">{ p.T(i18n.ReviewsWriteHint) }</p>
+					<a href={ templ.SafeURL(p.LocalHref("/reviews/new")) } data-dialog-open="review-dialog" class={ btn("lg"), actSecondary, "mt-3" }>
+						@IconPencil("")
+						{ p.T(i18n.ReviewsWrite) }
+					</a>
+					if d.Summary != nil && d.Summary.AllReal {
+						<p class="mt-4 text-step-small text-ink-soft">{ p.T(i18n.ReviewsModerated) }</p>
+					}
+				</div>
+			</div>
+			<div class="min-w-0" data-reviews>
+				@ReviewListPart(p, d.List)
+			</div>
+		</div>
+		<dialog id="review-dialog" aria-labelledby="review-dialog-title" class="fixed inset-x-0 top-auto bottom-0 m-0 max-h-[92dvh] w-full max-w-none overflow-y-auto rounded-t-3xl bg-paper p-g3 pb-[calc(1.618rem+env(safe-area-inset-bottom))] shadow-float sm:rounded-3xl backdrop:bg-ink/70 sm:inset-0 sm:m-auto sm:h-fit sm:max-w-[36rem] sm:p-g4">
+			<div class="mb-g2 flex items-center justify-between gap-3">
+				<h2 id="review-dialog-title" class="text-step-lead">{ p.T(i18n.ReviewsFormTitle) }</h2>
+				<form method="dialog">
+					<button class="tap inline-flex items-center justify-center rounded-full hover:bg-sand" aria-label={ p.T(i18n.ReviewsClose) }>
+						@IconX("size-5")
+					</button>
+				</form>
+			</div>
+			@ReviewForm(p, d.Form, true)
+		</dialog>
+	</section>
+}
+
+templ reviewBar(b ReviewBar) {
+	<span class="w-10 shrink-0 text-start font-medium tabular-nums">{ itoa(b.Stars) } ★</span>
+	<span class="h-2 flex-1 overflow-hidden rounded-full bg-sand">
+		<span class={ "block h-full rounded-full bg-oil", barWidth(b.Pct) }></span>
+	</span>
+	<span class="w-10 shrink-0 text-end text-ink-soft tabular-nums">{ itoa(b.Pct) }%</span>
+}
+
+// ReviewListPart is the list with its filter chip and "load more" (also the
+// fragment JS swaps in when a bar is chosen).
+templ ReviewListPart(p Page, l ReviewList) {
+	<div data-review-list data-fragment={ l.FragmentBase }>
+		if l.Stars > 0 {
+			<a href={ templ.SafeURL(l.AllHref) } data-review-filter="0" class="tap mb-6 inline-flex items-center gap-1.5 rounded-full bg-sand px-4 text-step-small font-medium">
+				{ p.T(i18n.ReviewsFilterStars, "stars", itoa(l.Stars)) }
+				@IconX("size-4")
+				<span class="sr-only">{ p.T(i18n.ReviewsFilterAll) }</span>
+			</a>
+		}
+		if len(l.Items) == 0 {
+			<p class="sheet max-w-[40ch] rounded-3xl px-6 py-8">{ p.T(i18n.ReviewsEmpty) }</p>
+		} else {
+			<ul class="space-y-14" data-review-items>
+				@ReviewCards(p, l.Items)
+			</ul>
+		}
+		if l.NextPage > 0 {
+			<a href={ templ.SafeURL(l.MoreHref) } data-review-more={ itoa(l.NextPage) } data-stars={ itoa(l.Stars) } class={ btn("md"), "btn-press mt-12 inline-flex bg-sand text-ink hover:bg-sand-deep/70" }>
+				{ p.T(i18n.ReviewsMore) }
+			</a>
+		}
+	</div>
+}
+
+templ ReviewCards(p Page, items []ReviewCard) {
+	for _, r := range items {
+		// Each letter takes the direction of its own words (an Arabic review on
+		// the French page reads right to left, signature included).
+		<li class="max-w-[60ch]" lang={ r.Lang } dir="auto">
+			<p class="break-words whitespace-pre-line text-step-body">{ r.Comment }</p>
+			if r.Photo.Valid() {
+				<a href={ templ.SafeURL(r.Photo.Fallback) } data-dialog-open={ "rv-photo-" + r.ID } aria-label={ p.T(i18n.ReviewsOpenPhoto) } class="group mt-4 block w-fit overflow-hidden rounded-2xl">
+					@Picture(r.Photo, p.T(i18n.ReviewsPhotoAlt, "name", r.Name), "6rem", false, "block size-24", "size-24 object-cover transition-transform duration-300 group-hover:scale-105")
+				</a>
+				<dialog id={ "rv-photo-" + r.ID } aria-label={ p.T(i18n.ReviewsPhotoAlt, "name", r.Name) } class="m-auto max-h-[92dvh] w-[calc(100%-1.5rem)] max-w-3xl overflow-hidden rounded-3xl bg-transparent p-0 backdrop:bg-ink/85">
+					@Picture(r.Photo, p.T(i18n.ReviewsPhotoAlt, "name", r.Name), "(min-width: 48rem) 48rem, 94vw", false, "block", "mx-auto h-auto max-h-[88dvh] w-auto rounded-3xl object-contain")
+					<form method="dialog" class="absolute end-2 top-2">
+						<button class="inline-flex size-11 items-center justify-center rounded-full bg-paper text-ink" aria-label={ p.T(i18n.ReviewsClose) }>
+							@IconX("size-5")
+						</button>
+					</form>
+				</dialog>
+			}
+			<div class="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1">
+				<p class="font-semibold break-words"><bdi>{ r.Name }</bdi></p>
+				if r.City != "" {
+					<p class="text-ink-soft"><bdi>{ r.City }</bdi></p>
+				}
+			</div>
+			<div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-step-small">
+				@Stars(float64(r.Rating), "sm", p.T(i18n.ReviewsStarsLabel, "rating", itoa(r.Rating)), "rv-"+r.ID, "")
+				if r.Verified {
+					<span class="inline-flex items-center gap-1 font-semibold text-olive">
+						@IconBadgeCheck("size-4")
+						{ p.T(i18n.ReviewsVerified) }
+					</span>
+				}
+				<bdi class="text-ink-soft">{ r.Day }</bdi>
+				if r.Demo {
+					<span data-demo class="rounded-full bg-olive-950 px-2.5 py-0.5 font-medium text-limewash" title={ p.T(i18n.ReviewsDemoNote) }>
+						{ p.T(i18n.ReviewsDemo) }
+						<span class="sr-only">: { p.T(i18n.ReviewsDemoNote) }</span>
+					</span>
+				}
+			</div>
+			if r.Reply != "" {
+				<div class="mt-5 rounded-2xl bg-sand px-5 py-4">
+					<p class="text-step-small font-semibold">{ p.T(i18n.ReviewsReply) }</p>
+					<p class="mt-1 break-words whitespace-pre-line" dir="auto">{ r.Reply }</p>
+				</div>
+			}
+		</li>
+	}
+}
+
+func (f ReviewFormData) e(name string) string { return f.Errors[name] }
+
+templ reviewErr(f ReviewFormData, id, name string) {
+	if f.e(name) != "" {
+		<p id={ id + "-error" } class="mt-1.5 text-sm font-medium text-danger">{ f.e(name) }</p>
+	}
+}
+
+// ReviewForm posts multipart to /{locale}/reviews. The proof of work needs JS
+// (it is solved just before the post); without JS a note offers WhatsApp.
+templ ReviewForm(p Page, f ReviewFormData, inDialog bool) {
+	if f.Sent {
+		<div class="py-g4 text-center" role="status">
+			@IconCircleCheck("mx-auto size-14 text-olive")
+			<p class="mt-g2 text-step-lead">{ p.T(i18n.ReviewsFormThanksTitle) }</p>
+			<p class="mx-auto mt-g1 max-w-[24rem] text-ink-soft">{ p.T(i18n.ReviewsFormThanks) }</p>
+			<a href={ templ.SafeURL(p.HomeHref() + "#reviews") } class={ btn("md"), actPrimary, "mt-g3" }>{ p.T(i18n.ReviewsClose) }</a>
+		</div>
+	} else {
+		<form method="post" action={ templ.SafeURL(p.LocalHref("/reviews")) } enctype="multipart/form-data" data-review-form novalidate class="relative space-y-g3">
+			<input type="hidden" name="form_token" value={ f.Token }/>
+			<input type="hidden" name="altcha" value="" data-altcha/>
+			<p class="text-ink-soft">{ p.T(i18n.ReviewsFormIntro) }</p>
+			<fieldset
+				class="star-input"
+				if f.e("rating") != "" {
+					aria-describedby="rating-error"
+				}
+			>
+				<legend class="mb-1.5 block font-medium">{ p.T(i18n.ReviewsFormRating) }</legend>
+				<div class="flex flex-wrap gap-0 sm:gap-1" dir="ltr">
+					for i := 1; i <= 5; i++ {
+						<label class="star-option tap relative inline-flex cursor-pointer items-center justify-center">
+							<input type="radio" name="rating" value={ itoa(i) } checked?={ f.v("rating") == itoa(i) } required class="peer sr-only"/>
+							<svg viewBox="0 0 24 24" class="size-9 transition-transform peer-focus-visible:scale-110" aria-hidden="true"><path d={ starPath }></path></svg>
+							<span class="sr-only">{ p.T(i18n.ReviewsFormStar, "rating", itoa(i)) }: { p.T(starWord(i)) }</span>
+						</label>
+					}
+				</div>
+				@reviewErr(f, "rating", "rating")
+			</fieldset>
+			<div class="grid gap-g3 sm:grid-cols-2">
+				<div>
+					<label for="rv-name" class="mb-1.5 block font-medium">{ p.T(i18n.ReviewsFormName) }</label>
+					<input id="rv-name" name="name" autocomplete="name" required maxlength="60" value={ f.v("name") } aria-invalid?={ f.e("name") != "" } aria-describedby="rv-name-hint" class="field-input"/>
+					@reviewErr(f, "rv-name", "name")
+					<p id="rv-name-hint" class="mt-1.5 text-xs text-ink-soft">{ p.T(i18n.ReviewsFormNameHint) }</p>
+				</div>
+				<div>
+					<label for="rv-city" class="mb-1.5 block font-medium">{ p.T(i18n.ReviewsFormCity) } <span class="text-sm font-normal text-ink-soft">({ p.T(i18n.OrderFormOptional) })</span></label>
+					<input id="rv-city" name="city" autocomplete="address-level2" maxlength="80" value={ f.v("city") } aria-invalid?={ f.e("city") != "" } class="field-input"/>
+					@reviewErr(f, "rv-city", "city")
+				</div>
+			</div>
+			<div>
+				<label for="rv-comment" class="mb-1.5 block font-medium">{ p.T(i18n.ReviewsFormComment) }</label>
+				<textarea id="rv-comment" name="comment" rows="4" required minlength="10" maxlength="600" placeholder={ p.T(i18n.ReviewsFormCommentPlaceholder) } aria-invalid?={ f.e("comment") != "" } class="field-input py-3" dir="auto">{ f.v("comment") }</textarea>
+				@reviewErr(f, "rv-comment", "comment")
+			</div>
+			<div>
+				<label for="rv-photo" class="mb-1.5 block font-medium">{ p.T(i18n.ReviewsFormPhoto) } <span class="text-sm font-normal text-ink-soft">({ p.T(i18n.OrderFormOptional) })</span></label>
+				<input id="rv-photo" type="file" name="photo" accept="image/jpeg,image/png,image/webp" aria-describedby="rv-photo-hint" class="block w-full min-h-11 rounded-xl border border-sand-deep bg-white p-2 text-sm file:me-3 file:min-h-10 file:rounded-full file:border-0 file:bg-ink file:px-4 file:text-limewash"/>
+				@reviewErr(f, "rv-photo", "photo")
+				<p id="rv-photo-hint" class="mt-1.5 text-xs text-ink-soft">{ p.T(i18n.ReviewsFormPhotoHint) }</p>
+			</div>
+			<div>
+				<label for="rv-phone" class="mb-1.5 block font-medium">{ p.T(i18n.ReviewsFormPhone) } <span class="text-sm font-normal text-ink-soft">({ p.T(i18n.OrderFormOptional) })</span></label>
+				<input id="rv-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" dir="ltr" maxlength="30" placeholder="06 12 34 56 78" value={ f.v("phone") } aria-invalid?={ f.e("phone") != "" } aria-describedby="rv-phone-hint" class="field-input text-start rtl:text-end"/>
+				@reviewErr(f, "rv-phone", "phone")
+				<p id="rv-phone-hint" class="mt-1.5 text-xs text-ink-soft">{ p.T(i18n.ReviewsFormPhoneHint) }</p>
+			</div>
+			// Honeypot: off-screen, skipped by keyboard and screen readers.
+			<div aria-hidden="true" class="absolute -start-[9999px] h-px w-px overflow-hidden">
+				<label>
+					{ p.T(i18n.OrderFormHoneypot) }
+					<input type="text" name="website" tabindex="-1" autocomplete="off"/>
+				</label>
+			</div>
+			<p role="alert" data-review-error data-generic={ p.T(i18n.ReviewsErrorsGeneric) } hidden?={ f.FormError == "" } class="font-medium text-danger">{ f.FormError }</p>
+			<noscript>
+				<p class="bg-oil-soft/70 p-3 text-sm text-ink">{ p.T(i18n.ReviewsFormNoscript) }</p>
+			</noscript>
+			<div class="flex flex-wrap gap-g2">
+				if inDialog {
+					<button type="submit" formmethod="dialog" formnovalidate class={ btn("lg"), "btn-press inline-flex bg-sand text-ink hover:bg-sand-deep/70" }>{ p.T(i18n.ReviewsFormCancel) }</button>
+				}
+				<button type="submit" data-busy-label={ p.T(i18n.ReviewsFormSubmitting) } class={ btn("lg"), actPrimary, "flex-1" }>{ p.T(i18n.ReviewsFormSubmit) }</button>
+			</div>
+		</form>
+	}
+}
+
+func starWord(i int) i18n.Key {
+	return [...]i18n.Key{i18n.ReviewsFormR1, i18n.ReviewsFormR2, i18n.ReviewsFormR3, i18n.ReviewsFormR4, i18n.ReviewsFormR5}[i-1]
+}
+
+// ReviewPage is the standalone form (without JS, after errors, and the thank-you).
+templ ReviewPage(p Page, f ReviewFormData) {
+	@SiteLayout(p, nil) {
+		<section class="container-page section-y">
+			<div class="sheet mx-auto max-w-[36rem] rounded-3xl p-g3 sm:p-g4">
+				<h1 class="mb-g2 text-step-head">{ p.T(i18n.ReviewsFormTitle) }</h1>
+				@ReviewForm(p, f, false)
+			</div>
+		</section>
+	}
+}
+
+// ReviewFragment is one more page of cards (JS appends the items and swaps the link).
+templ ReviewFragment(p Page, l ReviewList) {
+	<div data-review-page>
+		<ul>
+			@ReviewCards(p, l.Items)
+		</ul>
+		if l.NextPage > 0 {
+			<a href={ templ.SafeURL(l.MoreHref) } data-review-more={ itoa(l.NextPage) } data-stars={ itoa(l.Stars) } class={ btn("md"), "btn-press mt-12 inline-flex bg-sand text-ink hover:bg-sand-deep/70" }>
+				{ p.T(i18n.ReviewsMore) }
+			</a>
+		}
+	</div>
+}

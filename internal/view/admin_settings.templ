@@ -1,0 +1,264 @@
+package view
+
+import (
+	"github.com/omarchaouki/zaytona-go/internal/domain"
+	"github.com/omarchaouki/zaytona-go/internal/i18n"
+)
+
+// SettingsData fills Admin > Settings.
+type SettingsData struct {
+	S           domain.Settings
+	Form        *FormState
+	NeedsReauth bool
+	ReauthError string
+}
+
+func (d SettingsData) waDisplay() string {
+	if d.S.WhatsApp.Number == "" {
+		return ""
+	}
+	return domain.FormatPhoneDisplay("+" + d.S.WhatsApp.Number)
+}
+
+func (d SettingsData) phoneDisplay() string {
+	if len(d.S.Contact.Phones) == 0 {
+		return ""
+	}
+	return domain.FormatPhoneDisplay(d.S.Contact.Phones[0])
+}
+
+func (d SettingsData) deliveryMode() string {
+	dl := d.S.Delivery
+	if dl.Mode == domain.DeliveryFlat && dl.Fee.Valid && dl.Fee.Decimal.IsZero() {
+		return "free"
+	}
+	if dl.Mode == "" {
+		return domain.DeliveryConfirm
+	}
+	return dl.Mode
+}
+
+func (d SettingsData) fee() string {
+	if !d.S.Delivery.Fee.Valid {
+		return ""
+	}
+	return d.S.Delivery.Fee.Decimal.String()
+}
+
+func (d SettingsData) freeAbove() string {
+	if !d.S.Delivery.FreeAbove.Valid {
+		return ""
+	}
+	return d.S.Delivery.FreeAbove.Decimal.String()
+}
+
+templ settingsSection(id, title string, icon templ.Component) {
+	<section id={ id } aria-labelledby={ id + "-title" } class={ "scroll-mt-20", adminCard }>
+		<h2 id={ id + "-title" } class="flex items-center gap-2 text-lg font-bold text-olive">
+			@icon
+			{ title }
+		</h2>
+		<div class="mt-g2">
+			{ children... }
+		</div>
+	</section>
+}
+
+templ AdminSettings(p AdminPage, d SettingsData) {
+	@AdminShell(p) {
+		<div class="max-w-2xl space-y-g3">
+			<div>
+				<h1 class="text-h2">{ p.T(i18n.AdminSettingsTitle) }</h1>
+				<p class="mt-g1 text-ink-soft">{ p.T(i18n.AdminSettingsIntro) }</p>
+				@OwnerNote(p)
+			</div>
+			@settingsSection("identity", p.T(i18n.AdminSettingsIdentityTitle), IconHome("size-5 text-olive-600")) {
+				@identityForm(p, d, d.Form.For("identity"))
+			}
+			@settingsSection("contact", p.T(i18n.AdminSettingsContactTitle), WhatsAppIcon("size-5 text-whatsapp-deep")) {
+				if d.NeedsReauth && p.Owner {
+					<div class="mb-g2">
+						@ReauthCard(p, "/admin/settings#contact", d.ReauthError)
+					</div>
+				}
+				@contactForm(p, d, d.Form.For("contact"))
+			}
+			@settingsSection("delivery", p.T(i18n.AdminDeliveryTitle), IconTruck("size-5 text-olive-600")) {
+				@deliveryForm(p, d, d.Form.For("delivery"))
+			}
+			@settingsSection("templates", p.T(i18n.AdminSettingsTemplatesTitle), IconMessageCircle("size-5 text-olive-600")) {
+				@templatesForm(p, d, d.Form.For("templates"))
+			}
+			@settingsSection("notifications", p.T(i18n.AdminSettingsNotifyTitle), IconBell("size-5 text-olive-600")) {
+				@notificationsForm(p, d, d.Form.For("notifications"))
+			}
+			@settingsSection("toggles", p.T(i18n.AdminSettingsTogglesTitle), IconLayoutDashboard("size-5 text-olive-600")) {
+				@togglesForm(p, d, d.Form.For("toggles"))
+			}
+			@settingsSection("marketing", p.T(i18n.AdminMarketingTitle), IconSparkles("size-5 text-olive-600")) {
+				@marketingForm(p, d, d.Form.For("marketing"))
+			}
+		</div>
+	}
+}
+
+templ settingsForm(p AdminPage, group string) {
+	<form method="post" action={ templ.SafeURL("/admin/settings/" + group) } class="grid gap-g2">
+		@csrfField(p)
+		<fieldset disabled?={ !p.Owner } class="grid gap-g2 sm:grid-cols-2">
+			{ children... }
+		</fieldset>
+	</form>
+}
+
+templ identityForm(p AdminPage, d SettingsData, s *FormState) {
+	@settingsForm(p, "identity") {
+		@Input("identity", Field{Name: "nameAr", Label: p.T(i18n.AdminSettingsNameAr), Dir: "rtl", Required: true, Max: 120}, d.S.Identity.NameAr, s)
+		@Input("identity", Field{Name: "nameFr", Label: p.T(i18n.AdminSettingsNameFr), Dir: "ltr", Required: true, Max: 120}, d.S.Identity.NameFr, s)
+		<p class="-mt-g1 text-sm text-ink-soft sm:col-span-2">{ p.T(i18n.AdminSettingsNameHint) }</p>
+		@Input("identity", Field{Name: "addressAr", Label: p.T(i18n.AdminSettingsAddressAr), Dir: "rtl", Max: 300, Rows: 2}, d.S.Contact.AddressAr, s)
+		@Input("identity", Field{Name: "addressFr", Label: p.T(i18n.AdminSettingsAddressFr), Dir: "ltr", Max: 300, Rows: 2}, d.S.Contact.AddressFr, s)
+		<p class="-mt-g1 text-sm text-ink-soft sm:col-span-2">{ p.T(i18n.AdminSettingsAddressHint) }</p>
+		<h3 class="mt-g1 font-bold text-olive sm:col-span-2">{ p.T(i18n.AdminSettingsLegalTitle) }</h3>
+		@Input("identity", Field{Name: "legalName", Label: p.T(i18n.AdminSettingsLegalName), Max: 120, Class: "sm:col-span-2"}, d.S.Identity.LegalName, s)
+		@Input("identity", Field{Name: "ice", Label: p.T(i18n.AdminSettingsIce), Dir: "ltr", Mode: "numeric", Max: 20}, d.S.Identity.ICE, s)
+		@Input("identity", Field{Name: "rc", Label: p.T(i18n.AdminSettingsRc), Dir: "ltr", Max: 40}, d.S.Identity.RC, s)
+		@Checkbox("showLegalIds", p.T(i18n.AdminSettingsShowLegal), s.Checked("showLegalIds", d.S.Identity.ShowLegalIDs), "sm:col-span-2")
+		<div class="space-y-2 sm:col-span-2">
+			@SaveRow(p, p.T(i18n.AdminSettingsSave), s.E("form"), "")
+		</div>
+	}
+}
+
+templ contactForm(p AdminPage, d SettingsData, s *FormState) {
+	@settingsForm(p, "contact") {
+		<div class="sm:col-span-2">
+			@Input("contact", Field{Name: "whatsapp", Label: p.T(i18n.AdminSettingsWhatsapp), Hint: p.T(i18n.AdminSettingsWhatsappHint), Type: "tel", Mode: "tel", Dir: "ltr", Max: 30, Placeholder: "06 12 34 56 78"}, d.waDisplay(), s)
+			if d.S.WhatsApp.Number != "" {
+				<a href={ templ.SafeURL(domain.WhatsAppLink(d.S.WhatsApp.Number, "")) } target="_blank" rel="noopener noreferrer" class="tap mt-1 inline-flex items-center text-sm font-medium text-olive-600 underline underline-offset-4">{ p.T(i18n.AdminSettingsTest) }</a>
+			}
+		</div>
+		@Input("contact", Field{Name: "phone", Label: p.T(i18n.AdminSettingsPhone), Hint: p.T(i18n.AdminSettingsPhoneHint), Type: "tel", Mode: "tel", Dir: "ltr", Max: 30, Placeholder: "05 24 00 00 00", Class: "sm:col-span-2"}, d.phoneDisplay(), s)
+		@Input("contact", Field{Name: "email", Label: p.T(i18n.AdminSettingsEmail), Hint: p.T(i18n.AdminSettingsEmailHint), Type: "email", Mode: "email", Dir: "ltr", Max: 254, Class: "sm:col-span-2"}, d.S.Contact.Email, s)
+		@Input("contact", Field{Name: "hoursAr", Label: p.T(i18n.AdminSettingsHoursAr), Dir: "rtl", Max: 120}, d.S.Contact.HoursAr, s)
+		@Input("contact", Field{Name: "hoursFr", Label: p.T(i18n.AdminSettingsHoursFr), Dir: "ltr", Max: 120}, d.S.Contact.HoursFr, s)
+		@Input("contact", Field{Name: "responseAr", Label: p.T(i18n.AdminSettingsResponseAr), Dir: "rtl", Max: 120}, d.S.Contact.ResponseTimeAr, s)
+		@Input("contact", Field{Name: "responseFr", Label: p.T(i18n.AdminSettingsResponseFr), Dir: "ltr", Max: 120}, d.S.Contact.ResponseTimeFr, s)
+		@Input("contact", Field{Name: "mapUrl", Label: p.T(i18n.AdminSettingsMapUrl), Type: "url", Dir: "ltr", Max: 500, Class: "sm:col-span-2"}, d.S.Contact.MapURL, s)
+		@Input("contact", Field{Name: "mapEmbed", Label: p.T(i18n.AdminSettingsMapEmbed), Hint: p.T(i18n.AdminSettingsMapEmbedHint), Type: "url", Dir: "ltr", Max: 500, Class: "sm:col-span-2"}, d.S.Contact.MapEmbedURL, s)
+		<h3 class="mt-g1 font-bold text-olive sm:col-span-2">{ p.T(i18n.AdminSettingsSocialsTitle) }</h3>
+		<p class="-mt-g1 text-sm text-ink-soft sm:col-span-2">{ p.T(i18n.AdminSettingsSocialsHint) }</p>
+		@Input("contact", Field{Name: "facebook", Label: "Facebook", Type: "url", Dir: "ltr", Max: 500}, d.S.Contact.Socials.Facebook, s)
+		@Input("contact", Field{Name: "instagram", Label: "Instagram", Type: "url", Dir: "ltr", Max: 500}, d.S.Contact.Socials.Instagram, s)
+		@Input("contact", Field{Name: "tiktok", Label: "TikTok", Type: "url", Dir: "ltr", Max: 500}, d.S.Contact.Socials.TikTok, s)
+		@Input("contact", Field{Name: "youtube", Label: "YouTube", Type: "url", Dir: "ltr", Max: 500}, d.S.Contact.Socials.YouTube, s)
+		<div class="space-y-2 sm:col-span-2">
+			@SaveRow(p, p.T(i18n.AdminSettingsSave), s.E("form"), "")
+		</div>
+	}
+}
+
+templ deliveryOption(p AdminPage, mode, current string, label, hint i18n.Key) {
+	<label class="flex cursor-pointer items-start gap-2 rounded-field border-2 border-sand-deep p-3 has-[:checked]:border-oil has-[:checked]:bg-oil/10">
+		<input type="radio" name="mode" value={ mode } checked?={ current == mode } class="mt-1 size-4 shrink-0 accent-olive"/>
+		<span>
+			<span class="block font-medium">{ p.T(label) }</span>
+			<span class="block text-sm text-ink-soft">{ p.T(hint) }</span>
+		</span>
+	</label>
+}
+
+templ deliveryForm(p AdminPage, d SettingsData, s *FormState) {
+	<p class="mb-g2 text-sm text-ink-soft">{ p.T(i18n.AdminDeliveryIntro) }</p>
+	@settingsForm(p, "delivery") {
+		<fieldset class="grid gap-2 sm:col-span-2" data-delivery>
+			<legend class="sr-only">{ p.T(i18n.AdminDeliveryTitle) }</legend>
+			@deliveryOption(p, "flat", s.V("mode", d.deliveryMode()), i18n.AdminDeliveryFlat, i18n.AdminDeliveryFlatHint)
+			@deliveryOption(p, "free_above", s.V("mode", d.deliveryMode()), i18n.AdminDeliveryFreeAbove, i18n.AdminDeliveryFreeAboveHint)
+			@deliveryOption(p, "free", s.V("mode", d.deliveryMode()), i18n.AdminDeliveryFree, i18n.AdminDeliveryFreeHint)
+			@deliveryOption(p, "confirm", s.V("mode", d.deliveryMode()), i18n.AdminDeliveryConfirm, i18n.AdminDeliveryConfirmHint)
+		</fieldset>
+		@Input("delivery", Field{Name: "fee", Label: p.T(i18n.AdminDeliveryFee) + " (" + p.T(i18n.AdminDeliveryCurrency) + ")", Dir: "ltr", Mode: "decimal", Max: 10}, d.fee(), s)
+		@Input("delivery", Field{Name: "freeAbove", Label: p.T(i18n.AdminDeliveryThreshold) + " (" + p.T(i18n.AdminDeliveryCurrency) + ")", Dir: "ltr", Mode: "decimal", Max: 10}, d.freeAbove(), s)
+		@Input("delivery", Field{Name: "timeAr", Label: p.T(i18n.AdminDeliveryTimeAr), Dir: "rtl", Max: 120}, d.S.Delivery.TimeAr, s)
+		@Input("delivery", Field{Name: "timeFr", Label: p.T(i18n.AdminDeliveryTimeFr), Dir: "ltr", Max: 120}, d.S.Delivery.TimeFr, s)
+		// Updated live by admin.js from the same sentences the site uses.
+		<div
+			class="rounded-field bg-sand/60 p-3 text-sm sm:col-span-2"
+			data-delivery-preview
+			data-currency-ar={ i18n.T(i18n.AR, i18n.CurrencyMad) }
+			data-currency-fr={ i18n.T(i18n.FR, i18n.CurrencyMad) }
+			data-ar-flat={ i18n.T(i18n.AR, i18n.WhyUsDeliveryFlat) }
+			data-ar-free_above={ i18n.T(i18n.AR, i18n.WhyUsDeliveryFreeAbove) }
+			data-ar-free={ i18n.T(i18n.AR, i18n.WhyUsDeliveryFree) }
+			data-ar-confirm={ i18n.T(i18n.AR, i18n.WhyUsDeliveryConfirm) }
+			data-fr-flat={ i18n.T(i18n.FR, i18n.WhyUsDeliveryFlat) }
+			data-fr-free_above={ i18n.T(i18n.FR, i18n.WhyUsDeliveryFreeAbove) }
+			data-fr-free={ i18n.T(i18n.FR, i18n.WhyUsDeliveryFree) }
+			data-fr-confirm={ i18n.T(i18n.FR, i18n.WhyUsDeliveryConfirm) }
+		>
+			<p class="font-medium text-olive">{ p.T(i18n.AdminDeliveryPreview) }</p>
+			<p class="mt-1" dir="rtl" lang="ar" data-preview-ar>{ DeliveryText(d.S.Delivery, i18n.AR) }</p>
+			<p class="mt-1" dir="ltr" lang="fr" data-preview-fr>{ DeliveryText(d.S.Delivery, i18n.FR) }</p>
+		</div>
+		<div class="space-y-2 sm:col-span-2">
+			@SaveRow(p, p.T(i18n.AdminSettingsSave), s.E("form"), "")
+		</div>
+	}
+}
+
+templ templatesForm(p AdminPage, d SettingsData, s *FormState) {
+	<p class="mb-g2 text-sm text-ink-soft" dir="auto">{ p.T(i18n.AdminSettingsTemplatesIntro) }</p>
+	@settingsForm(p, "templates") {
+		@Input("templates", Field{Name: "orderAr", Label: p.T(i18n.AdminSettingsTemplateOrderAr), Dir: "rtl", Max: 1000, Rows: 4}, d.S.Templates.OrderAr, s)
+		@Input("templates", Field{Name: "orderFr", Label: p.T(i18n.AdminSettingsTemplateOrderFr), Dir: "ltr", Max: 1000, Rows: 4}, d.S.Templates.OrderFr, s)
+		@Input("templates", Field{Name: "customerAr", Label: p.T(i18n.AdminSettingsTemplateCustomerAr), Dir: "rtl", Max: 1000, Rows: 3}, d.S.Templates.CustomerAr, s)
+		@Input("templates", Field{Name: "customerFr", Label: p.T(i18n.AdminSettingsTemplateCustomerFr), Dir: "ltr", Max: 1000, Rows: 3}, d.S.Templates.CustomerFr, s)
+		@Input("templates", Field{Name: "greetingAr", Label: p.T(i18n.AdminSettingsTemplateGreetingAr), Dir: "rtl", Max: 500, Rows: 2}, d.S.Templates.GreetingAr, s)
+		@Input("templates", Field{Name: "greetingFr", Label: p.T(i18n.AdminSettingsTemplateGreetingFr), Dir: "ltr", Max: 500, Rows: 2}, d.S.Templates.GreetingFr, s)
+		<div class="space-y-2 sm:col-span-2">
+			@SaveRow(p, p.T(i18n.AdminSettingsSave), s.E("form"), "")
+		</div>
+	}
+}
+
+templ notificationsForm(p AdminPage, d SettingsData, s *FormState) {
+	@settingsForm(p, "notifications") {
+		@Input("notifications", Field{Name: "email", Label: p.T(i18n.AdminSettingsNotifyEmail), Hint: p.T(i18n.AdminSettingsNotifyEmailHint), Type: "email", Mode: "email", Dir: "ltr", Max: 254, Class: "sm:col-span-2"}, d.S.Notifications.Email, s)
+		@Input("notifications", Field{Name: "webhook", Label: p.T(i18n.AdminSettingsWebhook), Hint: p.T(i18n.AdminSettingsWebhookHint), Type: "url", Dir: "ltr", Max: 500, Class: "sm:col-span-2"}, d.S.Notifications.WebhookURL, s)
+		<div class="space-y-2 sm:col-span-2">
+			@SaveRow(p, p.T(i18n.AdminSettingsSave), s.E("form"), "")
+		</div>
+	}
+}
+
+templ togglesForm(p AdminPage, d SettingsData, s *FormState) {
+	@settingsForm(p, "toggles") {
+		@Checkbox("showReviews", p.T(i18n.AdminSettingsShowReviews), s.Checked("showReviews", d.S.Toggles.ShowReviews), "sm:col-span-2")
+		@Checkbox("showGallery", p.T(i18n.AdminSettingsShowGallery), s.Checked("showGallery", d.S.Toggles.ShowGallery), "sm:col-span-2")
+		@Checkbox("showCounters", p.T(i18n.AdminSettingsShowCounters), s.Checked("showCounters", d.S.Toggles.ShowCounters), "sm:col-span-2")
+		<div class="space-y-2 sm:col-span-2">
+			@SaveRow(p, p.T(i18n.AdminSettingsSave), s.E("form"), "")
+		</div>
+	}
+}
+
+templ marketingForm(p AdminPage, d SettingsData, s *FormState) {
+	<p class="mb-g2 text-sm text-ink-soft">{ p.T(i18n.AdminMarketingIntro) }</p>
+	@settingsForm(p, "marketing") {
+		@Checkbox("pixelEnabled", p.T(i18n.AdminMarketingEnable), s.Checked("pixelEnabled", d.S.Marketing.PixelEnabled), "sm:col-span-2")
+		@Input("marketing", Field{Name: "pixelId", Label: p.T(i18n.AdminMarketingPixelId), Hint: p.T(i18n.AdminMarketingPixelHint), Dir: "ltr", Mode: "numeric", Max: 20, Class: "sm:col-span-2"}, d.S.Marketing.PixelID, s)
+		<div class="sm:col-span-2">
+			@Checkbox("requireConsent", p.T(i18n.AdminMarketingConsent), s.Checked("requireConsent", d.S.Marketing.RequireConsent), "")
+			<p class="ms-7 text-sm text-ink-soft">{ p.T(i18n.AdminMarketingConsentHint) }</p>
+		</div>
+		<ul class="list-disc space-y-1 ps-5 text-sm text-ink-soft sm:col-span-2">
+			<li>{ p.T(i18n.AdminMarketingEventPageView) }</li>
+			<li>{ p.T(i18n.AdminMarketingEventLead) }</li>
+			<li>{ p.T(i18n.AdminMarketingTestHint) }</li>
+		</ul>
+		<div class="space-y-2 sm:col-span-2">
+			@SaveRow(p, p.T(i18n.AdminSettingsSave), s.E("form"), "")
+		</div>
+	}
+}

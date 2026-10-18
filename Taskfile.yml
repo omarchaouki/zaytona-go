@@ -1,0 +1,151 @@
+# Task runner (https://taskfile.dev). Works on Windows, macOS and Linux:
+# Task runs commands with its built-in POSIX shell, so no bash or make is needed.
+version: "3"
+
+dotenv: [".env"]
+
+vars:
+  BIN: ./bin/zaytona{{exeExt}}
+  VERSION:
+    sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+  GOFLAGS_RELEASE: -trimpath -tags nodynamic
+  LDFLAGS: -s -w -X main.version={{.VERSION}}
+
+tasks:
+  default:
+    cmds: [task --list]
+
+  tools:
+    desc: Download the pinned Tailwind CLI (checksum verified) and check Go tool directives
+    cmds:
+      - go run ./tools/fetchtools
+      - go mod download
+      - go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@{{.GOLANGCI_VERSION}}
+    vars:
+      GOLANGCI_VERSION: v2.14.0 # update deliberately; Dependabot does not track this line
+
+  generate:
+    desc: templ + sqlc + typed i18n keys
+    cmds:
+      - go tool templ generate
+      - go tool sqlc generate
+      - go run ./tools/i18ngen
+
+  generate:check:
+    desc: Fail if generated code is out of date
+    cmds:
+      - task: generate
+      - git diff --exit-code -- internal/view internal/db/dbq internal/i18n
+
+  assets:
+    desc: Tailwind + esbuild + content hashing + precompression into web/static/dist
+    cmds:
+      - go run ./tools/assetbuild
+
+  dev:
+    desc: Run the app with live reload of templates and CSS (database must be running)
+    deps: [dev:assets, dev:server]
+
+  dev:assets:
+    internal: true
+    cmds:
+      - go run ./tools/assetbuild -watch
+
+  dev:server:
+    internal: true
+    cmds:
+      - go tool templ generate --watch --proxy=http://localhost:3000 --cmd="go run -tags nodynamic ./cmd/zaytona serve"
+
+  db:local:
+    desc: Embedded Postgres on 127.0.0.1:5434 (no Docker), data in .data/pg
+    cmds:
+      - go run ./tools/dblocal
+
+  db:migrate:
+    desc: Apply migrations (adopts a Drizzle-managed database if detected)
+    cmds:
+      - go run ./cmd/zaytona migrate
+
+  db:seed:
+    desc: Idempotent seed (demo rows flagged is_demo)
+    cmds:
+      - go run ./cmd/zaytona seed
+
+  admin:reset-password:
+    desc: Reset ADMIN_EMAIL to ADMIN_PASSWORD, sign out all sessions, force a new password
+    cmds:
+      - go run ./cmd/zaytona admin reset-password
+
+  images:
+    desc: Re-encode assets/source photos into web/static/images (AVIF + WebP, 480/960/1600) and update images.json
+    cmds:
+      - go run -tags nodynamic ./cmd/zaytona images
+
+  fmt:
+    cmds:
+      - go tool gofumpt -w .
+
+  fmt:check:
+    cmds:
+      - cmd: |
+          out="$(go tool gofumpt -l .)"
+          if [ -n "$out" ]; then echo "Not formatted:"; echo "$out"; exit 1; fi
+
+  vet:
+    cmds: [go vet ./...]
+
+  lint:
+    cmds: [golangci-lint run ./...]
+
+  test:
+    desc: Unit + integration tests (embedded Postgres, no Docker)
+    cmds:
+      # -race needs cgo (a C compiler); CI on Linux runs it, Windows dev machines usually cannot.
+      # nodynamic: the WASM image encoders, as in the release build (no system libwebp/libavif).
+      - go test -tags nodynamic {{if ne OS "windows"}}-race {{end}}-count=1 ./...
+
+  fuzz:
+    desc: Short fuzz run on parsers (phone, CSV, image entry point)
+    cmds:
+      - go test ./internal/domain -run=^$ -fuzz=FuzzNormalizePhone -fuzztime=30s
+      - go test ./internal/domain -run=^$ -fuzz=FuzzCSVEscape -fuzztime=30s
+      - go test -tags nodynamic ./internal/media -run=^$ -fuzz=FuzzDecodeUpload -fuzztime=60s
+
+  vuln:
+    cmds: [go tool govulncheck ./...]
+
+  e2e:
+    desc: chromedp scenarios against a running server (BASE_URL, default http://localhost:3000)
+    cmds:
+      - go test -tags e2e -count=1 ./tests/e2e/...
+
+  audit:mobile:
+    desc: chromedp mobile audit of every public and admin page, AR and FR; exits non-zero on findings
+    cmds:
+      - go run ./tests/e2e/cmd/audit -selftest
+      - go run ./tests/e2e/cmd/audit
+
+  shots:
+    desc: One screenshot per landing section into tests/e2e/screenshots (needs a running server)
+    cmds:
+      - go run ./tests/e2e/cmd/shots -width 390
+      - go run ./tests/e2e/cmd/shots -width 1280
+
+  check:
+    desc: Everything that must be green before saying "done"
+    cmds:
+      - go mod verify
+      - task: fmt:check
+      - task: generate:check
+      - task: vet
+      - task: lint
+      - task: test
+      - task: vuln
+
+  build:
+    desc: Assets + static release binary in ./bin
+    deps: [generate, assets]
+    env:
+      CGO_ENABLED: "0"
+    cmds:
+      - go build {{.GOFLAGS_RELEASE}} -ldflags="{{.LDFLAGS}}" -o {{.BIN}} ./cmd/zaytona

@@ -1,0 +1,49 @@
+# /etc/systemd/system/zaytona.service
+# Install: binary at /opt/zaytona/zaytona, env at /etc/zaytona/zaytona.env (chmod 600, owner root),
+# uploads at /var/lib/zaytona/uploads. Then: systemctl daemon-reload && systemctl enable --now zaytona
+[Unit]
+Description=Huilerie El Hadaji web app
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=zaytona
+Group=zaytona
+EnvironmentFile=/etc/zaytona/zaytona.env
+Environment=APP_ENV=production UPLOAD_DIR=/var/lib/zaytona/uploads TRUST_PROXY=true
+ExecStart=/opt/zaytona/zaytona serve
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=30
+KillSignal=SIGTERM
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+# Left off on purpose: the WASM image encoders (wazero) compile to native code at runtime.
+# Set to true if image encoding is moved out of process or wazero runs in interpreter mode.
+MemoryDenyWriteExecute=false
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+ReadWritePaths=/var/lib/zaytona/uploads
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

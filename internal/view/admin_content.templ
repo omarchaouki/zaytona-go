@@ -1,0 +1,256 @@
+package view
+
+import (
+	"github.com/omarchaouki/zaytona-go/internal/domain"
+	"github.com/omarchaouki/zaytona-go/internal/i18n"
+)
+
+// ContentData fills Admin > Content (texts) and the gallery.
+type ContentData struct {
+	HeroAr, HeroFr         domain.HeroContent
+	StoryAr, StoryFr       domain.StoryContent
+	PoliciesAr, PoliciesFr domain.PoliciesContent
+	PrivacyAr, PrivacyFr   domain.PageContent
+	TermsAr, TermsFr       domain.PageContent
+	Gallery                []GalleryRow
+	Form                   *FormState
+	UploadMB               string
+}
+
+// GalleryRow is one gallery photo.
+type GalleryRow struct {
+	ID, CaptionAr, CaptionFr string
+	Image                    Image
+}
+
+// FAQData fills Admin > FAQ.
+type FAQData struct {
+	Items []FAQRow
+	Form  *FormState
+}
+
+// FAQRow is one question.
+type FAQRow struct {
+	ID, QuestionAr, QuestionFr, AnswerAr, AnswerFr string
+	Active, Demo                                   bool
+}
+
+func (p AdminPage) faqQuestion(f FAQRow) string {
+	if p.Locale == i18n.AR {
+		return f.QuestionAr
+	}
+	return f.QuestionFr
+}
+
+templ contentBlock(p AdminPage, id, title string) {
+	<section id={ id } aria-labelledby={ id + "-title" } class={ "scroll-mt-20", adminCard }>
+		<h2 id={ id + "-title" } class="text-lg font-bold text-olive">{ title }</h2>
+		<form method="post" action={ templ.SafeURL("/admin/content/" + id) } class="mt-g2">
+			@csrfField(p)
+			<fieldset disabled?={ !p.Owner } class="grid gap-g2 sm:grid-cols-2">
+				{ children... }
+				<div class="space-y-2 sm:col-span-2">
+					@SaveRow(p, p.T(i18n.AdminCommonSave), "", "")
+				</div>
+			</fieldset>
+		</form>
+	</section>
+}
+
+templ langHead(p AdminPage) {
+	<p class="hidden text-sm font-bold text-ink-soft sm:block">{ p.T(i18n.AdminCommonArabic) }</p>
+	<p class="hidden text-sm font-bold text-ink-soft sm:block">{ p.T(i18n.AdminCommonFrench) }</p>
+}
+
+templ AdminContent(p AdminPage, d ContentData) {
+	@AdminShell(p) {
+		<div class="max-w-3xl space-y-g3">
+			<div>
+				<h1 class="text-h2">{ p.T(i18n.AdminContentTitle) }</h1>
+				<p class="mt-g1 text-ink-soft">{ p.T(i18n.AdminContentIntro) }</p>
+				<p class="mt-1 text-sm text-ink-soft">{ p.T(i18n.AdminCommonEmptyFallback) }</p>
+				@OwnerNote(p)
+			</div>
+			@contentBlock(p, "hero", p.T(i18n.AdminContentHeroTitle)) {
+				@heroFields(p, d, d.Form.For("hero"))
+			}
+			@contentBlock(p, "story", p.T(i18n.AdminContentStoryTitle)) {
+				@langHead(p)
+				@Input("story", Field{Name: "title_ar", Label: p.T(i18n.AdminContentHeadline), Dir: "rtl", Max: 160}, d.StoryAr.Title, d.Form.For("story"))
+				@Input("story", Field{Name: "title_fr", Label: p.T(i18n.AdminContentHeadline), Dir: "ltr", Max: 160}, d.StoryFr.Title, d.Form.For("story"))
+				@Input("story", Field{Name: "body_ar", Label: p.T(i18n.AdminContentStoryBody), Dir: "rtl", Max: 4000, Rows: 8}, d.StoryAr.Body, d.Form.For("story"))
+				@Input("story", Field{Name: "body_fr", Label: p.T(i18n.AdminContentStoryBody), Dir: "ltr", Max: 4000, Rows: 8}, d.StoryFr.Body, d.Form.For("story"))
+			}
+			@contentBlock(p, "policies", p.T(i18n.AdminContentPoliciesTitle)) {
+				@langHead(p)
+				@Input("policies", Field{Name: "cod_ar", Label: p.T(i18n.AdminContentPolicyCod), Dir: "rtl", Max: 600, Rows: 3}, d.PoliciesAr.COD, d.Form.For("policies"))
+				@Input("policies", Field{Name: "cod_fr", Label: p.T(i18n.AdminContentPolicyCod), Dir: "ltr", Max: 600, Rows: 3}, d.PoliciesFr.COD, d.Form.For("policies"))
+				@Input("policies", Field{Name: "delivery_ar", Label: p.T(i18n.AdminContentPolicyDelivery), Dir: "rtl", Max: 600, Rows: 3}, d.PoliciesAr.Delivery, d.Form.For("policies"))
+				@Input("policies", Field{Name: "delivery_fr", Label: p.T(i18n.AdminContentPolicyDelivery), Dir: "ltr", Max: 600, Rows: 3}, d.PoliciesFr.Delivery, d.Form.For("policies"))
+				@Input("policies", Field{Name: "returns_ar", Label: p.T(i18n.AdminContentPolicyReturns), Dir: "rtl", Max: 600, Rows: 3}, d.PoliciesAr.Returns, d.Form.For("policies"))
+				@Input("policies", Field{Name: "returns_fr", Label: p.T(i18n.AdminContentPolicyReturns), Dir: "ltr", Max: 600, Rows: 3}, d.PoliciesFr.Returns, d.Form.For("policies"))
+				@Input("policies", Field{Name: "privacy_ar", Label: p.T(i18n.AdminContentPolicyPrivacy), Dir: "rtl", Max: 600, Rows: 3}, d.PoliciesAr.Privacy, d.Form.For("policies"))
+				@Input("policies", Field{Name: "privacy_fr", Label: p.T(i18n.AdminContentPolicyPrivacy), Dir: "ltr", Max: 600, Rows: 3}, d.PoliciesFr.Privacy, d.Form.For("policies"))
+			}
+			@contentBlock(p, "page_privacy", p.T(i18n.AdminContentPrivacy)) {
+				@pageFields(p, "page_privacy", d.PrivacyAr, d.PrivacyFr, d.Form.For("page_privacy"))
+			}
+			@contentBlock(p, "page_terms", p.T(i18n.AdminContentTerms)) {
+				@pageFields(p, "page_terms", d.TermsAr, d.TermsFr, d.Form.For("page_terms"))
+			}
+			@galleryEditor(p, d)
+		</div>
+	}
+}
+
+templ heroFields(p AdminPage, d ContentData, s *FormState) {
+	@langHead(p)
+	@Input("hero", Field{Name: "eyebrow_ar", Label: p.T(i18n.AdminContentEyebrow), Dir: "rtl", Max: 120}, d.HeroAr.Eyebrow, s)
+	@Input("hero", Field{Name: "eyebrow_fr", Label: p.T(i18n.AdminContentEyebrow), Dir: "ltr", Max: 120}, d.HeroFr.Eyebrow, s)
+	@Input("hero", Field{Name: "title_ar", Label: p.T(i18n.AdminContentHeadline), Hint: p.T(i18n.AdminContentHeadlineHint), Dir: "rtl", Max: 160}, d.HeroAr.Title, s)
+	@Input("hero", Field{Name: "title_fr", Label: p.T(i18n.AdminContentHeadline), Hint: p.T(i18n.AdminContentHeadlineHint), Dir: "ltr", Max: 160}, d.HeroFr.Title, s)
+	@Input("hero", Field{Name: "subtitle_ar", Label: p.T(i18n.AdminContentSubtitle), Dir: "rtl", Max: 400, Rows: 3}, d.HeroAr.Subtitle, s)
+	@Input("hero", Field{Name: "subtitle_fr", Label: p.T(i18n.AdminContentSubtitle), Dir: "ltr", Max: 400, Rows: 3}, d.HeroFr.Subtitle, s)
+}
+
+templ pageFields(p AdminPage, key string, ar, fr domain.PageContent, s *FormState) {
+	if !ar.Reviewed || !fr.Reviewed {
+		<p class="rounded-field bg-oil-soft/70 px-3 py-2 text-sm font-medium text-oil-deep sm:col-span-2">{ p.T(i18n.AdminContentDraft) }</p>
+	}
+	@langHead(p)
+	@Input(key, Field{Name: "title_ar", Label: p.T(i18n.AdminContentHeadline), Dir: "rtl", Max: 160}, ar.Title, s)
+	@Input(key, Field{Name: "title_fr", Label: p.T(i18n.AdminContentHeadline), Dir: "ltr", Max: 160}, fr.Title, s)
+	@Input(key, Field{Name: "html_ar", Label: p.T(i18n.AdminContentPageHtml), Dir: "rtl", Max: 30000, Rows: 12}, ar.HTML, s)
+	@Input(key, Field{Name: "html_fr", Label: p.T(i18n.AdminContentPageHtml), Dir: "ltr", Max: 30000, Rows: 12}, fr.HTML, s)
+	@Checkbox("reviewed", p.T(i18n.AdminContentReviewed), s.Checked("reviewed", ar.Reviewed && fr.Reviewed), "sm:col-span-2")
+}
+
+templ galleryEditor(p AdminPage, d ContentData) {
+	<section id="gallery" aria-labelledby="gallery-title" class={ "scroll-mt-20", adminCard }>
+		<h2 id="gallery-title" class="text-lg font-bold text-olive">{ p.T(i18n.AdminGalleryTitle) }</h2>
+		<p class="mt-1 text-sm text-ink-soft">{ p.T(i18n.AdminGalleryIntro) }</p>
+		<ul class="mt-g2 space-y-g2">
+			if len(d.Gallery) == 0 {
+				<li class="rounded-card border-2 border-dashed border-sand-deep p-g3 text-center text-ink-soft">{ p.T(i18n.AdminGalleryEmpty) }</li>
+			}
+			for i, g := range d.Gallery {
+				<li class="rounded-card bg-sand/40 p-g2">
+					<div class="flex items-start gap-g2">
+						@Picture(g.Image, "", "96px", false, "block size-24 shrink-0 overflow-hidden rounded-card", "size-24 object-cover")
+						<form method="post" action={ templ.SafeURL("/admin/gallery/" + g.ID) } class="grid min-w-0 flex-1 gap-2">
+							@csrfField(p)
+							<fieldset disabled?={ !p.Owner } class="grid gap-2">
+								@Input("g"+g.ID, Field{Name: "captionAr", Label: p.T(i18n.AdminGalleryCaptionAr), Dir: "rtl", Max: 200}, g.CaptionAr, d.Form.For(g.ID))
+								@Input("g"+g.ID, Field{Name: "captionFr", Label: p.T(i18n.AdminGalleryCaptionFr), Dir: "ltr", Max: 200}, g.CaptionFr, d.Form.For(g.ID))
+								if p.Owner {
+									<div>
+										<button type="submit" class={ btn("md"), "inline-flex border border-olive/30 text-olive hover:bg-olive/5" }>{ p.T(i18n.AdminCommonSave) }</button>
+									</div>
+								}
+							</fieldset>
+						</form>
+						if p.Owner {
+							<div class="flex shrink-0 flex-col items-center">
+								@MoveButtons(p, "/admin/gallery/"+g.ID+"/move", g.CaptionFr, i == 0, i == len(d.Gallery)-1)
+								@DeleteButton(p, "/admin/gallery/"+g.ID+"/delete", p.T(i18n.AdminCommonDelete), "confirm-gallery")
+							</div>
+						}
+					</div>
+				</li>
+			}
+		</ul>
+		if p.Owner {
+			<form method="post" action="/admin/gallery" enctype="multipart/form-data" class="mt-g3 grid gap-g2 rounded-card border-2 border-dashed border-sand-deep p-g2 sm:grid-cols-2">
+				@csrfField(p)
+				<h3 class="font-bold text-olive sm:col-span-2">{ p.T(i18n.AdminGalleryAdd) }</h3>
+				<div class="sm:col-span-2">
+					@PhotoInput(p, "gallery-new", "photo", p.T(i18n.AdminCommonPhoto), p.T(i18n.AdminCommonPhotoHint, "mb", d.UploadMB), d.Form.For("gallery").E("photo"))
+				</div>
+				@Input("gallery-new", Field{Name: "captionAr", Label: p.T(i18n.AdminGalleryCaptionAr), Dir: "rtl", Max: 200}, "", d.Form.For("gallery"))
+				@Input("gallery-new", Field{Name: "captionFr", Label: p.T(i18n.AdminGalleryCaptionFr), Dir: "ltr", Max: 200}, "", d.Form.For("gallery"))
+				<div class="sm:col-span-2">
+					@SaveRow(p, p.T(i18n.AdminGalleryAdd), "", p.T(i18n.AdminCommonUploading))
+				</div>
+			</form>
+			@ConfirmDialog(p, "confirm-gallery", p.T(i18n.AdminCommonDeleteTitle), p.T(i18n.AdminGalleryDeleteBody))
+		}
+	</section>
+}
+
+templ AdminFAQ(p AdminPage, d FAQData) {
+	@AdminShell(p) {
+		<div class="max-w-3xl">
+			<h1 class="text-h2">{ p.T(i18n.AdminFaqTitle) }</h1>
+			<p class="mt-g1 text-ink-soft">{ p.T(i18n.AdminFaqIntro) }</p>
+			@OwnerNote(p)
+			<ul class="mt-g3 space-y-g2">
+				if len(d.Items) == 0 {
+					<li class="rounded-card border-2 border-dashed border-sand-deep p-g4 text-center text-ink-soft">{ p.T(i18n.AdminFaqEmpty) }</li>
+				}
+				for i, f := range d.Items {
+					<li class={ adminCard, templ.KV("opacity-75", !f.Active) }>
+						<div class="flex items-start gap-g1">
+							if p.Owner {
+								@MoveButtons(p, "/admin/faq/"+f.ID+"/move", p.faqQuestion(f), i == 0, i == len(d.Items)-1)
+							}
+							<div class="min-w-0 flex-1">
+								<p class="font-bold break-words text-olive">{ p.faqQuestion(f) }</p>
+								<div class="mt-1 flex flex-wrap gap-1.5 text-xs font-medium">
+									if !f.Active {
+										<span class="inline-flex items-center gap-1 rounded-full bg-sand px-2 py-0.5 text-ink-soft">
+											@IconEyeOff("size-3")
+											{ p.T(i18n.AdminFaqHidden) }
+										</span>
+									}
+									if f.Demo {
+										<span class="rounded-full bg-ink/80 px-2 py-0.5 text-limewash">{ p.T(i18n.AdminFaqDemo) }</span>
+									}
+								</div>
+							</div>
+							if p.Owner {
+								@DeleteButton(p, "/admin/faq/"+f.ID+"/delete", p.T(i18n.AdminCommonDelete), "confirm-faq")
+							}
+						</div>
+						if p.Owner {
+							<details class="mt-g2 border-t border-sand-deep/60 pt-g1" open?={ d.Form.For(f.ID).Posted() }>
+								<summary class="tap inline-flex cursor-pointer list-none items-center gap-1.5 rounded-full px-2 text-sm font-medium text-olive hover:bg-sand [&::-webkit-details-marker]:hidden">
+									@IconPencil("size-4")
+									{ p.T(i18n.AdminCommonEdit) }
+								</summary>
+								<div class="mt-g2">
+									@faqForm(p, f, f.ID, "/admin/faq/"+f.ID, d.Form.For(f.ID))
+								</div>
+							</details>
+						}
+					</li>
+				}
+			</ul>
+			if p.Owner {
+				<details class="mt-g3" open?={ d.Form.For("new").Posted() }>
+					<summary class={ btn("md"), "inline-flex cursor-pointer list-none bg-olive text-limewash hover:bg-olive-hover [&::-webkit-details-marker]:hidden" }>
+						@IconPlus("")
+						{ p.T(i18n.AdminFaqAdd) }
+					</summary>
+					<div class="mt-g2 rounded-card bg-white p-g3 shadow-lift ring-2 ring-oil">
+						@faqForm(p, FAQRow{Active: true}, "new", "/admin/faq", d.Form.For("new"))
+					</div>
+				</details>
+				@ConfirmDialog(p, "confirm-faq", p.T(i18n.AdminCommonDeleteTitle), p.T(i18n.AdminFaqDeleteBody))
+			}
+		</div>
+	}
+}
+
+templ faqForm(p AdminPage, f FAQRow, key, action string, s *FormState) {
+	<form method="post" action={ templ.SafeURL(action) } class="grid gap-g2 sm:grid-cols-2">
+		@csrfField(p)
+		@Input(key, Field{Name: "questionAr", Label: p.T(i18n.AdminFaqQuestionAr), Dir: "rtl", Required: true, Max: 300, Rows: 2}, f.QuestionAr, s)
+		@Input(key, Field{Name: "questionFr", Label: p.T(i18n.AdminFaqQuestionFr), Dir: "ltr", Required: true, Max: 300, Rows: 2}, f.QuestionFr, s)
+		@Input(key, Field{Name: "answerAr", Label: p.T(i18n.AdminFaqAnswerAr), Dir: "rtl", Required: true, Max: 3000, Rows: 5}, f.AnswerAr, s)
+		@Input(key, Field{Name: "answerFr", Label: p.T(i18n.AdminFaqAnswerFr), Dir: "ltr", Required: true, Max: 3000, Rows: 5}, f.AnswerFr, s)
+		@Checkbox("isActive", p.T(i18n.AdminFaqActive), s.Checked("isActive", f.Active), "sm:col-span-2")
+		<div class="space-y-2 sm:col-span-2">
+			@SaveRow(p, p.T(i18n.AdminCommonSave), s.E("form"), "")
+		</div>
+	</form>
+}

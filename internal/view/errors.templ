@@ -1,0 +1,35 @@
+package view
+
+import "github.com/omarchaouki/zaytona-go/internal/i18n"
+
+templ NotFound(p Page) {
+	@SiteLayout(p, nil) {
+		<section class="container-page section-y">
+			<h1 class="text-step-head max-w-[20ch]">{ p.T(i18n.ErrorsNotFoundTitle) }</h1>
+			<p class="mt-6 max-w-[40ch]">{ p.T(i18n.ErrorsNotFoundBody) }</p>
+			<a href={ templ.SafeURL(p.HomeHref()) } class={ btn("lg"), actPrimary, "mt-10" }>
+				{ p.T(i18n.ErrorsBackHome) }
+			</a>
+		</section>
+	}
+}
+
+// Policy renders the privacy or terms page (admin HTML, sanitized).
+templ Policy(p Page, d PolicyData) {
+	@SiteLayout(p, nil) {
+		<article class="container-page max-w-3xl py-14 md:py-20">
+			<h1 class="text-step-head">{ d.Title }</h1>
+			if d.HTML != "" || d.Extra != "" {
+				<div class="rich-text mt-8 text-ink">
+					@RichText(d.HTML)
+					@RichText(d.Extra)
+				</div>
+			} else {
+				<p class="mt-8 text-ink-soft">{ p.T(i18n.PolicyNotPublished) }</p>
+			}
+			<a href={ templ.SafeURL(p.HomeHref()) } class={ textLink, "mt-12" }>
+				{ p.T(i18n.PolicyBackHome) }
+			</a>
+		</article>
+	}
+}

@@ -1,0 +1,40 @@
+# Caddy in front of the Go app: automatic HTTPS (Let's Encrypt), compression,
+# body size cap. Replace the domain. Run the app with TRUST_PROXY=true.
+your-domain.ma, www.your-domain.ma {
+	# Canonical host
+	@www host www.your-domain.ma
+	redir @www https://your-domain.ma{uri} permanent
+
+	encode zstd gzip
+
+	# Largest legitimate body is one image upload (MAX_UPLOAD_MB=5) plus form fields
+	request_body {
+		max_size 6MB
+	}
+
+	header {
+		-Server
+	}
+
+	reverse_proxy 127.0.0.1:3000 {
+		# The app reads only the right-most hop added by this proxy
+		header_up X-Real-IP {remote_host}
+		transport http {
+			dial_timeout 5s
+			response_header_timeout 30s
+		}
+	}
+
+	log {
+		output file /var/log/caddy/zaytona.log {
+			roll_size 20MiB
+			roll_keep 10
+		}
+		# Do not keep query strings (confirmation tokens) in access logs
+		format filter {
+			request>uri query {
+				delete t
+			}
+		}
+	}
+}

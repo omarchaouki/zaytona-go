@@ -1,0 +1,331 @@
+package view
+
+import (
+	"strconv"
+
+	"github.com/omarchaouki/zaytona-go/internal/i18n"
+)
+
+// AdminDocument is the HTML shell of every admin page (noindex, admin.js).
+templ AdminDocument(p AdminPage, bodyClass string) {
+	<!DOCTYPE html>
+	<html lang={ p.Meta().HTMLLang } dir={ p.Meta().Dir }>
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+			<meta name="theme-color" content="#141b0c"/>
+			<meta name="format-detection" content="telephone=no"/>
+			<meta name="robots" content="noindex, nofollow"/>
+			<meta name="referrer" content="same-origin"/>
+			<title>{ p.Title }</title>
+			if p.Locale == i18n.AR {
+				<link rel="preload" as="font" type="font/woff2" href={ p.Asset("fonts/ibm-plex-sans-arabic-arabic-400-normal.woff2") } crossorigin="anonymous"/>
+			} else {
+				<link rel="preload" as="font" type="font/woff2" href={ p.Asset("fonts/archivo-latin-wght-normal.woff2") } crossorigin="anonymous"/>
+			}
+			<link rel="stylesheet" href={ p.Asset("css/app.css") }/>
+			<link rel="icon" href={ p.Asset("favicon.svg") } type="image/svg+xml"/>
+			<script nonce={ p.Nonce }>document.documentElement.classList.add('js')</script>
+			<script type="module" nonce={ p.Nonce } src={ p.Asset("js/admin.js") }></script>
+		</head>
+		<body class={ bodyClass } data-csrf={ p.CSRF } data-title={ p.Title }>
+			{ children... }
+		</body>
+	</html>
+}
+
+// csrfField is the synchronizer token of every admin form.
+templ csrfField(p AdminPage) {
+	<input type="hidden" name="csrf" value={ p.CSRF }/>
+}
+
+// AdminFlash shows the result of the last action.
+templ AdminFlash(p AdminPage) {
+	if p.Flash != "" {
+		if p.FlashError {
+			<p role="alert" class="mb-g2 flex items-start gap-2 rounded-card border border-danger/40 bg-danger/5 p-3 text-sm font-medium text-danger">
+				@IconAlertCircle("mt-0.5 size-4 shrink-0")
+				{ p.Flash }
+			</p>
+		} else {
+			<p role="status" class="mb-g2 flex items-start gap-2 rounded-card border border-olive-600/30 bg-olive-600/5 p-3 text-sm font-medium text-olive-600">
+				@IconCircleCheck("mt-0.5 size-4 shrink-0")
+				{ p.Flash }
+			</p>
+		}
+	}
+}
+
+// AdminShell is the signed-in layout. Phones and tablets: a slim top bar and a
+// bottom tab bar (daily pages + "More" sheet). Computers: a sidebar.
+templ AdminShell(p AdminPage) {
+	@AdminDocument(p, shellBodyClass(p.Bare)) {
+		<a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:start-3 focus:top-3 focus:z-50 focus:rounded-full focus:bg-olive focus:px-4 focus:py-2 focus:text-limewash">
+			{ p.T(i18n.NavSkipToContent) }
+		</a>
+		if !p.Bare {
+			@adminSidebar(p)
+		}
+		<div class="min-w-0">
+			<header data-print-hide class={ "sticky top-0 z-30 flex h-14 items-center gap-2.5 bg-olive-950 px-4 pt-[env(safe-area-inset-top)] text-limewash shadow-[0_6px_20px_-12px_rgb(20_27_12/0.7)]", templ.KV("lg:hidden", !p.Bare) }>
+				@ArchMark("h-6 w-4")
+				<span class="min-w-0 truncate font-display text-base font-bold">{ p.T(i18n.AdminNavBrand) }</span>
+				if !p.Bare {
+					@soundToggle(p, "ms-auto")
+				} else {
+					@logoutForm(p, "ms-auto tap inline-flex items-center gap-2 rounded-full px-3 text-sm text-limewash/80 hover:bg-limewash/10", false)
+				}
+			</header>
+			<main id="main" class={ "mx-auto w-full max-w-6xl px-4 pt-5 sm:px-6 lg:px-8 lg:py-10", templ.KV("pb-[calc(5.5rem+env(safe-area-inset-bottom))]", !p.Bare), templ.KV("pb-10", p.Bare) }>
+				@AdminFlash(p)
+				{ children... }
+			</main>
+			if !p.Bare {
+				@adminNotifications(p)
+				@adminTabBar(p)
+			}
+		</div>
+	}
+}
+
+templ adminBadge(p AdminPage, item adminNavItem, class string) {
+	if item.Key == "reviews" && p.PendingReviews > 0 {
+		<span class={ "inline-flex min-w-5 items-center justify-center rounded-full bg-oil px-1.5 py-0.5 text-xs leading-none font-bold text-olive-950 tabular-nums", class }>
+			{ strconv.FormatInt(p.PendingReviews, 10) }
+		</span>
+	}
+	if item.Key == "orders" {
+		<span data-unseen-badge class={ "inline-flex min-w-5 items-center justify-center rounded-full bg-danger px-1.5 py-0.5 text-xs leading-none font-bold text-white tabular-nums notify-pulse", class } hidden?={ p.Unseen == 0 }>
+			{ strconv.FormatInt(p.Unseen, 10) }
+		</span>
+	}
+}
+
+func shellBodyClass(bare bool) string {
+	if bare {
+		return "min-h-dvh bg-sand/40"
+	}
+	return "min-h-dvh bg-sand/40 lg:grid lg:grid-cols-[16rem_minmax(0,1fr)]"
+}
+
+const adminSideLink = "tap flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors"
+
+func adminSideClass(active bool) string {
+	if active {
+		return adminSideLink + " bg-oil text-olive-950 hover:bg-oil"
+	}
+	return adminSideLink + " text-limewash/75 hover:bg-limewash/10 hover:text-limewash"
+}
+
+templ adminSidebar(p AdminPage) {
+	<aside data-print-hide class="sticky top-0 hidden h-dvh overflow-y-auto bg-olive-950 text-limewash lg:block">
+		<div class="flex items-center gap-2.5 px-5 py-6">
+			@ArchMark("h-7 w-5")
+			<span class="font-display text-base font-bold">{ p.T(i18n.AdminNavBrand) }</span>
+			@soundToggle(p, "ms-auto")
+		</div>
+		<nav aria-label={ p.T(i18n.AdminNavMain) } class="px-3">
+			<ul class="space-y-1">
+				for _, n := range append(append([]adminNavItem{}, adminPrimary...), p.secondary()...) {
+					<li>
+						<a href={ templ.SafeURL(n.Href) } class={ adminSideClass(p.Active == n.Key) } aria-current?={ p.Active == n.Key }>
+							@n.Icon("size-5")
+							{ p.T(n.Label) }
+							@adminBadge(p, n, "ms-auto")
+						</a>
+					</li>
+				}
+			</ul>
+		</nav>
+		<div class="mt-4 border-t border-limewash/10 px-3 py-4">
+			<p class="truncate px-3 text-xs text-limewash/60" dir="ltr">{ p.Email }</p>
+			<div class="mt-3 space-y-1">
+				@localeForm(p, adminSideClass(false)+" w-full")
+				<a href={ templ.SafeURL("/" + string(p.Locale)) } target="_blank" rel="noopener noreferrer" class={ adminSideClass(false) }>
+					@IconExternalLink("size-5")
+					{ p.T(i18n.AdminNavViewSite) }
+				</a>
+				@logoutForm(p, adminSideClass(false)+" w-full", true)
+			</div>
+		</div>
+	</aside>
+}
+
+// localeForm switches the admin language (a POST: it changes the account).
+templ localeForm(p AdminPage, class string) {
+	<form method="post" action="/admin/locale">
+		@csrfField(p)
+		<input type="hidden" name="next" value={ p.Return }/>
+		<button type="submit" class={ class } lang={ p.Locale.Other().Meta().HTMLLang }>
+			@IconLanguages("size-5")
+			{ p.T(i18n.AdminNavSwitchLanguage) }
+		</button>
+	</form>
+}
+
+templ logoutForm(p AdminPage, class string, icon bool) {
+	<form method="post" action="/admin/logout">
+		@csrfField(p)
+		<button type="submit" class={ class }>
+			if icon {
+				@IconLogOut("size-5")
+			}
+			{ p.T(i18n.AdminNavLogout) }
+		</button>
+	</form>
+}
+
+// soundToggle turns the new-order chime on and off (JS only, hidden without it).
+templ soundToggle(p AdminPage, class string) {
+	<button
+		type="button"
+		hidden
+		data-sound-toggle
+		data-label-on={ p.T(i18n.AdminNotifySoundOn) }
+		data-label-off={ p.T(i18n.AdminNotifySoundOff) }
+		data-label-blocked={ p.T(i18n.AdminNotifySoundBlocked) }
+		aria-pressed="false"
+		aria-label={ p.T(i18n.AdminNotifySoundOff) }
+		class={ "tap inline-flex items-center justify-center rounded-full text-limewash/80 hover:bg-limewash/10 hover:text-limewash", class }
+	>
+		<span data-sound-on hidden>
+			@IconBell("size-5")
+		</span>
+		<span data-sound-off>
+			@IconBellOff("size-5")
+		</span>
+	</button>
+}
+
+templ adminTabBar(p AdminPage) {
+	<nav aria-label={ p.T(i18n.AdminNavMain) } data-print-hide class="fixed inset-x-0 bottom-0 z-40 border-t border-limewash/10 bg-olive-950/95 pb-[env(safe-area-inset-bottom)] text-limewash backdrop-blur lg:hidden">
+		<ul class="mx-auto grid max-w-xl grid-cols-5">
+			for _, n := range adminPrimary {
+				<li>
+					<a
+						href={ templ.SafeURL(n.Href) }
+						class={ "tab-link group relative flex h-16 flex-col items-center justify-center gap-1 transition-colors", templ.KV("is-active text-oil-bright", p.Active == n.Key), templ.KV("text-limewash/65", p.Active != n.Key) }
+						aria-current?={ p.Active == n.Key }
+					>
+						<span class="tab-indicator absolute inset-x-4 top-0 h-0.5 rounded-full bg-oil-bright"></span>
+						<span class="relative">
+							@n.Icon("size-6")
+							<span class="absolute -end-3 -top-2">
+								@adminBadge(p, n, "")
+							</span>
+						</span>
+						<span class="max-w-full truncate px-1 text-[0.75rem] font-medium">{ p.navLabel(n) }</span>
+					</a>
+				</li>
+			}
+			<li>
+				// A page without JS, the bottom sheet with it.
+				<a
+					href="/admin/more"
+					data-dialog-open="admin-more"
+					class={ "tab-link relative flex h-16 w-full flex-col items-center justify-center gap-1 transition-colors", templ.KV("is-active text-oil-bright", p.secondaryActive() || p.Active == "more"), templ.KV("text-limewash/65", !p.secondaryActive() && p.Active != "more") }
+				>
+					<span class="tab-indicator absolute inset-x-4 top-0 h-0.5 rounded-full bg-oil-bright"></span>
+					@IconMenu("size-6")
+					<span class="text-[0.75rem] font-medium">{ p.T(i18n.AdminNavMore) }</span>
+				</a>
+			</li>
+		</ul>
+	</nav>
+	<dialog id="admin-more" aria-labelledby="admin-more-title" class="sheet-content fixed inset-x-0 top-auto bottom-0 m-0 max-h-[85dvh] w-full max-w-none overflow-y-auto rounded-t-[24px] bg-limewash px-3 pt-2 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-lift backdrop:bg-ink/50 focus:outline-none lg:hidden">
+		<div aria-hidden="true" class="mx-auto mb-2 h-1 w-10 rounded-full bg-sand-deep"></div>
+		<div class="flex items-center justify-between px-2">
+			<h2 id="admin-more-title" class="font-display text-h3 text-olive">{ p.T(i18n.AdminNavMore) }</h2>
+			<form method="dialog">
+				<button class="tap inline-flex items-center justify-center rounded-full text-olive hover:bg-sand" aria-label={ p.T(i18n.AdminNavClose) }>
+					@IconX("size-5")
+				</button>
+			</form>
+		</div>
+		@AdminMoreList(p)
+	</dialog>
+}
+
+// AdminMoreList is the "More" content: the sheet on phones and the /admin/more page without JS.
+templ AdminMoreList(p AdminPage) {
+	<p class="truncate px-2 text-sm text-ink-soft" dir="ltr">{ p.Email }</p>
+	<ul class="mt-3 space-y-1">
+		for _, n := range p.secondary() {
+			<li>
+				<a href={ templ.SafeURL(n.Href) } class={ "sheet-row", templ.KV("is-active", p.Active == n.Key) } aria-current?={ p.Active == n.Key }>
+					@n.Icon("size-5 text-olive-600")
+					{ p.T(n.Label) }
+				</a>
+			</li>
+		}
+		<li>
+			@localeForm(p, "sheet-row w-full [&_svg]:text-olive-600")
+		</li>
+		<li>
+			<a href={ templ.SafeURL("/" + string(p.Locale)) } target="_blank" rel="noopener noreferrer" class="sheet-row">
+				@IconExternalLink("size-5 text-olive-600")
+				{ p.T(i18n.AdminNavViewSite) }
+			</a>
+		</li>
+	</ul>
+	<div class="mt-2 border-t border-sand-deep pt-3">
+		@logoutForm(p, "sheet-row w-full text-danger", true)
+	</div>
+}
+
+// AdminMore is the "More" page (phones without JS).
+templ AdminMore(p AdminPage) {
+	@AdminShell(p) {
+		<div class="max-w-md">
+			<h1 class="text-h2">{ p.T(i18n.AdminNavMore) }</h1>
+			<div class="mt-g2 rounded-card bg-limewash p-2 shadow-lift">
+				@AdminMoreList(p)
+			</div>
+		</div>
+	}
+}
+
+// adminNotifications is filled by the 10 s poll (admin.js) from /admin/notifications.
+templ adminNotifications(p AdminPage) {
+	<div
+		data-notifications
+		data-unseen={ strconv.FormatInt(p.Unseen, 10) }
+		aria-live="polite"
+		aria-label={ p.T(i18n.AdminNotifyLabel) }
+		data-print-hide
+		class="pointer-events-none fixed inset-x-3 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-50 flex flex-col items-center gap-2 sm:inset-x-auto sm:end-4 sm:items-end lg:bottom-4"
+	></div>
+}
+
+// AuthDocument is the centered card of the login and 2FA pages.
+templ AuthDocument(p AdminPage, switchHref string) {
+	@AdminDocument(p, "") {
+		<main id="main" class="glow-olive flex min-h-dvh items-center justify-center px-4 py-10">
+			<div class="w-full max-w-sm">
+				<div class="mb-6 flex items-center justify-between gap-3 text-limewash">
+					<div class="flex min-w-0 items-center gap-2.5">
+						@ArchMark("h-8 w-6 shrink-0")
+						<span class="truncate font-display text-lg font-bold">{ p.T(i18n.AdminNavBrand) }</span>
+					</div>
+					if switchHref != "" {
+						<a href={ templ.SafeURL(switchHref) } lang={ p.Locale.Other().Meta().HTMLLang } class="tap inline-flex shrink-0 items-center rounded-full border border-limewash/25 px-3 text-sm hover:bg-limewash/10">
+							{ p.T(i18n.AdminNavSwitchLanguage) }
+						</a>
+					}
+				</div>
+				<div class="rounded-[20px] bg-limewash p-6 shadow-[0_30px_80px_-30px_rgb(0_0_0/0.6)] sm:p-8">
+					{ children... }
+				</div>
+			</div>
+		</main>
+	}
+}
+
+// AdminMessage is a small page with one message and a link (forbidden, expired form).
+templ AdminMessage(p AdminPage, message, href, label string) {
+	@AuthDocument(p, "") {
+		<h1 class="text-h3">{ p.Title }</h1>
+		<p class="mt-2 text-ink-soft">{ message }</p>
+		<a href={ templ.SafeURL(href) } class={ btn("md"), "mt-6 inline-flex w-full bg-olive text-limewash hover:bg-olive-hover" }>{ label }</a>
+	}
+}

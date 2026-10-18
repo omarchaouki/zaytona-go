@@ -1,0 +1,58 @@
+version: "2"
+
+run:
+  timeout: 5m
+  build-tags: [nodynamic]
+
+linters:
+  default: standard
+  enable:
+    - gosec          # security: weak crypto, SQL string building, file perms, etc.
+    - bodyclose
+    - noctx          # outbound HTTP must carry a context
+    - errorlint
+    - rowserrcheck
+    - sqlclosecheck
+    - contextcheck
+    - nilerr
+    - misspell
+    - unconvert
+    - revive
+    - forbidigo
+  settings:
+    forbidigo:
+      forbid:
+        # templ.Raw only in internal/view/safehtml.go (see exclusion below)
+        - pattern: ^templ\.Raw$
+          msg: use view.SafeHTML (bluemonday-sanitized) instead of templ.Raw
+        - pattern: ^fmt\.Print.*$
+          msg: use log/slog with redaction helpers
+        - pattern: ^pgx\.QueryExecModeSimpleProtocol$
+          msg: simple protocol is forbidden (CVE-2026-41889 class of bugs)
+      analyze-types: true
+    gosec:
+      excludes: []
+  exclusions:
+    generated: strict
+    rules:
+      - path: internal/view/safehtml\.go
+        linters: [forbidigo]
+      - path: (tools|tests)/
+        linters: [forbidigo]
+      - path: cmd/zaytona/
+        text: fmt\.Print
+        linters: [forbidigo]
+      # templ components receive the request context at Render (render passes
+      # r.Context() through templ.WithNonce); contextcheck cannot follow the
+      # generated component closures.
+      - path: internal/web/(admin|public)/
+        text: '\$1'
+        linters: [contextcheck]
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes: [github.com/omarchaouki/zaytona-go]

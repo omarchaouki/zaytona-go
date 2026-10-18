@@ -1,0 +1,790 @@
+package view
+
+import (
+	"strconv"
+
+	"github.com/omarchaouki/zaytona-go/internal/i18n"
+)
+
+// HeroImageSizes is the `sizes` of the stage photograph (also used by the preload).
+const HeroImageSizes = "(min-width: 64rem) 45vw, 100vw"
+
+templ landingHead(p Page, d LandingData) {
+	for _, doc := range d.JSONLD {
+		@JSONLD(p.Nonce, doc)
+	}
+}
+
+// Landing is the public page: one job, turn a visit into a COD order.
+//
+// Art direction ("split stage"): the first chapter is a reading column beside
+// a fixed stage of the mill's photographs, which change as the chapters pass.
+// The idea: the litre, the unit the mill sells by, is the measure of the page
+// (the price per litre at figure size, a price list, a gauge that fills a
+// bidon to the chosen litres and prices it from the real price per litre).
+// After the first chapter every section has its own composition.
+templ Landing(p Page, d LandingData, f OrderFormData) {
+	@SiteLayout(p, landingHead(p, d)) {
+		<div class="stage-split" data-stage-split>
+			@Stage([]StageShot{
+				{Key: "hero", Image: d.HeroImage, Pos: "pos-50-40"},
+				{Key: "harvest", Image: StaticImage(p.Asset, "olives-harvest"), Alt: p.T(i18n.HeroImageAlt), Pos: "pos-50-30"},
+				{Key: "grove", Image: StaticImage(p.Asset, "grove-path"), Pos: "pos-50-60"},
+			}, d.HeroEyebrow)
+			<div class="reading">
+				@Hero(p, d)
+				@Offers(p, d)
+				@OnssaSection(p, d)
+				@Benefits(p)
+			</div>
+		</div>
+		@Reasons(p, d)
+		if d.Reviews != nil {
+			@ReviewsSection(p, *d.Reviews)
+		}
+		@Story(p, d)
+		@HowItWorks(p)
+		@OrderSection(p, f)
+		@WhyUs(p, d)
+		@Faq(p, d)
+		@FinalCTA(p)
+	}
+}
+
+// Hero: the first answer in large type. What it is and where from, what a
+// litre costs, one action. Texts come from Admin > Content when set.
+templ Hero(p Page, d LandingData) {
+	<section aria-labelledby="hero-title" data-stage="hero" class="gutter flex flex-col pt-10 pb-20 lg:min-h-[calc(100svh-var(--header-h))] lg:justify-end lg:pb-16">
+		<h1 id="hero-title" data-letters class="text-step-head max-w-[20ch]">
+			@Emphasis(d.HeroTitle, "")
+		</h1>
+		if d.PricePerLiter != "" {
+			<p class="rise-in stagger-60 mt-8 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+				<span class="text-step-figure">{ d.PricePerLiter }</span>
+				<span class="text-step-lead">{ p.T(i18n.ProductsPerLiterUnit) }</span>
+			</p>
+		} else if d.PriceFrom != "" {
+			<p class="rise-in stagger-60 mt-8 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+				<span class="text-step-lead">{ p.T(i18n.HeroFrom) }</span>
+				<span class="text-step-figure">{ d.PriceFrom }</span>
+			</p>
+		}
+		<p class="rise-in stagger-75 mt-6 max-w-[40ch] text-step-lead">{ d.HeroSubtitle }</p>
+		<div data-hero-cta class="rise-in stagger-90 mt-8 flex flex-wrap items-center gap-x-8 gap-y-3">
+			<a href="#order" class={ btn("lg"), actPrimary }>
+				{ p.T(i18n.HeroCtaOrder) }
+				@IconArrowForward("")
+			</a>
+			@WALink(p, "hero", "", textLink, "") {
+				@WhatsAppIcon("size-5 text-whatsapp-deep")
+				{ p.T(i18n.HeroCtaWhatsapp) }
+			}
+		</div>
+		<p class="rise-in stagger-100 mt-8 text-step-small text-ink-soft">
+			{ p.T(i18n.HeroAssureCod) } · { p.T(i18n.HeroAssureDelivery) } · { p.T(i18n.HeroAssureOnssa) }
+		</p>
+		if d.Rating != nil {
+			<a href="#reviews" class="rise-in stagger-110 mt-3 inline-flex min-h-11 w-fit items-center gap-3 text-step-small hover:text-olive">
+				@Stars(d.Rating.Average, "md", d.Rating.StarsLabel, "hero-stars", "")
+				<span class="underline underline-offset-4">{ d.Rating.SummaryLabel }</span>
+			</a>
+		}
+	</section>
+}
+
+// Offers: the mill's price list on one cut sheet, every row a link to the
+// order form, then the litre gauge for any other quantity.
+templ Offers(p Page, d LandingData) {
+	<section id="offers" aria-labelledby="products-title" data-stage="harvest" class="gutter section-y scroll-mt-4">
+		<div data-reveal>
+			<h2 id="products-title" class="text-step-head">{ p.T(i18n.ProductsTitle) }</h2>
+			<p class="mt-6 max-w-[46ch] text-step-body">{ p.T(i18n.ProductsIntro) }</p>
+		</div>
+		if len(d.Offers) == 0 && d.Custom == nil {
+			<p data-reveal class="sheet mt-12 max-w-[46ch] rounded-3xl px-6 py-8">{ p.T(i18n.ProductsEmpty) }</p>
+		} else {
+			if len(d.Offers) > 0 {
+				<ul class="mt-12 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+					for i, o := range d.Offers {
+						<li data-reveal class={ staggerClass(float64(i) * 0.08) }>
+							@offerCard(p, o, i)
+						</li>
+					}
+				</ul>
+			}
+			if d.Custom != nil {
+				<div data-reveal class="sheet mt-4 rounded-3xl px-3 pt-8 pb-10 sm:px-8">
+					@litreGauge(p, *d.Custom, false)
+				</div>
+			}
+		}
+		if p.WAHref("") != "" {
+			<p data-reveal class="mt-8 flex flex-wrap items-center gap-x-3">
+				{ p.T(i18n.ProductsHelp) }
+				@WALink(p, "products_help", "", textLink, "") {
+					{ p.T(i18n.ProductsHelpLink) }
+				}
+			</p>
+		}
+	</section>
+}
+
+// offerCard: the size in large type on an olive panel with a jerrycan filled
+// to scale (against the largest offer), then the price, the price per litre
+// and one order button. A real link to #order (works before JS); landing.js
+// also selects the offer in the form.
+templ offerCard(p Page, o OfferCard, i int) {
+	<article class={ "offer-card flex h-full flex-col rounded-3xl bg-paper p-2.5", templ.KV("offer-out", o.OutOfStock) }>
+		<div class={ "olive-texture-dark relative flex items-end justify-between gap-3 overflow-hidden rounded-[1.25rem] bg-olive-700 px-5 pt-6 pb-5 text-limewash", fillClass(o.Fill) }>
+			<p class="offer-size leading-none whitespace-nowrap tabular-nums">{ offerTitle(o) }</p>
+			<div class="offer-bidon w-16 shrink-0 sm:w-20">
+				@bidon("bidon-" + strconv.Itoa(i))
+			</div>
+			if o.OutOfStock {
+				<span class="absolute start-4 top-4 rounded-full bg-limewash px-3 py-1 text-step-small font-semibold text-danger">{ p.T(i18n.ProductsOutOfStock) }</span>
+			} else if o.LowStock {
+				<span class="absolute start-4 top-4 rounded-full bg-oil-bright px-3 py-1 text-step-small font-semibold text-olive-950">{ p.T(i18n.ProductsLowStock) }</span>
+			}
+		</div>
+		<div class="flex flex-1 flex-col px-2.5 pt-5 pb-2">
+			if o.SizeLabel != "" {
+				<h3 class="text-step-small font-medium text-ink-soft">{ o.Name }</h3>
+			}
+			<p class="mt-1 text-step-lead font-semibold tabular-nums">{ o.Price }</p>
+			if o.PerLiter != "" {
+				<p class="text-step-small text-olive tabular-nums">{ p.T(i18n.ProductsPerLiter, "price", o.PerLiter) }</p>
+			}
+			if o.Tagline != "" {
+				<p class="mt-3 text-step-small text-ink-soft">{ o.Tagline }</p>
+			}
+			<div class="mt-auto pt-5">
+				if o.OutOfStock {
+					@WALink(p, "product_unavailable", "", btn("md", "whitespace-normal")+" btn-press inline-flex w-full bg-sand text-center text-ink hover:bg-sand-deep/70", "") {
+						@WhatsAppIcon("text-whatsapp-deep")
+						{ p.T(i18n.ProductsOutOfStockAsk) }
+					}
+				} else {
+					<a href={ templ.SafeURL("?offer=" + o.Slug + "#order") } data-offer={ o.Slug } aria-label={ o.OrderLabel } class={ btn("md"), actPrimary, "w-full" }>
+						{ p.T(i18n.ProductsOrderShort) }
+						@IconArrowForward("")
+					</a>
+				}
+			</div>
+		</div>
+	</article>
+}
+
+func offerTitle(o OfferCard) string {
+	if o.SizeLabel != "" {
+		return o.SizeLabel
+	}
+	return o.Name
+}
+
+// fillClass maps a fill (20 to 100) to its CSS class (CSP: no style attributes).
+func fillClass(fill int) string {
+	if fill <= 0 {
+		return "fill-60"
+	}
+	return "fill-" + strconv.Itoa(min(max(fill/10*10, 20), 100))
+}
+
+// litreGauge: the one live thing. Pick the litres and read the real total
+// from the price per litre; a drawn bidon fills to match. Without JS it is a
+// plain GET form to ?offer=custom&liters=<n>#order, which preselects the
+// quantity in the order form.
+templ litreGauge(p Page, c CustomCard, afterList bool) {
+	<form
+		method="get"
+		action={ templ.SafeURL(p.HomeHref() + "#order") }
+		data-gauge
+		data-per-liter={ c.PerLiterRaw }
+		data-min={ strconv.Itoa(c.Min) }
+		data-max={ strconv.Itoa(c.Max) }
+		data-currency={ p.T(i18n.CurrencyMad) }
+		data-result={ p.T(i18n.ProductsGaugeResult) }
+		data-per-liter-label={ c.PerLiter }
+		class={ templ.KV("mt-14", afterList) }
+	>
+		<input type="hidden" name="offer" value="custom"/>
+		<h3 class="px-2 text-step-lead">{ p.T(i18n.ProductsGaugeTitle) }</h3>
+		<p class="mt-1 px-2 text-step-small text-ink-soft">{ c.Hint }</p>
+		<div class="mt-6 px-2">
+			<label for="gauge-liters" class="block font-medium">{ p.T(i18n.OrderFormLitersLabel) }</label>
+			<div class="mt-2 flex items-center gap-3" dir="ltr">
+				<input id="gauge-liters" name="liters" type="number" inputmode="numeric" min={ strconv.Itoa(c.Min) } max={ strconv.Itoa(c.Max) } step="1" value={ gaugeStart(c) } class="field-input w-36 text-lg font-semibold tabular-nums"/>
+				<span class="text-ink-soft">{ p.T(i18n.OrderFormLitersUnit) }</span>
+			</div>
+			<input type="range" min={ strconv.Itoa(c.Min) } max={ strconv.Itoa(c.Max) } step="1" value={ gaugeStart(c) } aria-label={ p.T(i18n.OrderFormLitersLabel) } data-gauge-range class="gauge-range mt-3"/>
+		</div>
+		<div class="mt-6 grid grid-cols-[4.5rem_minmax(0,1fr)] items-end gap-5 px-2 sm:grid-cols-[6rem_minmax(0,1fr)] sm:gap-8">
+			@bidon("bidon-gauge")
+			<div class="gauge-js min-w-0" aria-live="polite">
+				<p class="text-step-head tabular-nums" data-gauge-total></p>
+				<p class="mt-1 text-step-small text-ink-soft">
+					<span data-gauge-result></span>
+					{ " · " + p.T(i18n.OrderFormTotalWithoutDelivery) }
+				</p>
+			</div>
+		</div>
+		<button type="submit" data-gauge-submit aria-label={ p.T(i18n.ProductsCustomLabel) } class={ btn("lg", "whitespace-normal"), actPrimary, "mx-2 mt-6" }>
+			{ p.T(i18n.ProductsGaugeSubmit) }
+			@IconArrowForward("")
+		</button>
+	</form>
+}
+
+// gaugeStart: the gauge opens half way, on a whole multiple of 5 litres.
+func gaugeStart(c CustomCard) string {
+	if c.Max <= c.Min {
+		return strconv.Itoa(c.Min)
+	}
+	mid := (c.Min + c.Max) / 2
+	mid -= mid % 5
+	return strconv.Itoa(max(mid, c.Min))
+}
+
+// bidon: the plastic jerrycan oil is sold in, drawn in the page's colours;
+// the oil inside is scaled by --fill (.gauge-oil: the gauge sets it live,
+// the offer cards through a fill-NN class). id keeps each clip path unique.
+templ bidon(id string) {
+	<svg viewBox="0 0 100 132" class="w-full" aria-hidden="true" focusable="false">
+		<defs>
+			<clipPath id={ id }>
+				<path d="M10 40 Q10 30 20 30 H70 L90 50 V120 Q90 128 82 128 H18 Q10 128 10 120 Z"></path>
+			</clipPath>
+		</defs>
+		<path d="M10 40 Q10 30 20 30 H70 L90 50 V120 Q90 128 82 128 H18 Q10 128 10 120 Z" fill="var(--color-limewash)"></path>
+		<g clip-path={ "url(#" + id + ")" }>
+			<rect class="gauge-oil" x="0" y="30" width="100" height="98" fill="var(--color-oil)"></rect>
+		</g>
+		<path d="M10 40 Q10 30 20 30 H70 L90 50 V120 Q90 128 82 128 H18 Q10 128 10 120 Z" fill="none" stroke="var(--color-ink)" stroke-width="3" stroke-linejoin="round"></path>
+		<path d="M22 30 V14 Q22 8 28 8 H52 Q58 8 58 14 V30" fill="none" stroke="var(--color-ink)" stroke-width="3"></path>
+		<path d="M70 30 L78 18 L90 26 L84 38" fill="var(--color-ink)"></path>
+	</svg>
+}
+
+type benefit struct {
+	title, body i18n.Key
+}
+
+var nutritionBenefits = []benefit{
+	{i18n.BenefitsFatsTitle, i18n.BenefitsFatsBody},
+	{i18n.BenefitsVitaminTitle, i18n.BenefitsVitaminBody},
+	{i18n.BenefitsPolyphenolsTitle, i18n.BenefitsPolyphenolsBody},
+}
+
+var everydayBenefits = []benefit{
+	{i18n.BenefitsCookingTitle, i18n.BenefitsCookingBody},
+	{i18n.BenefitsTableTitle, i18n.BenefitsTableBody},
+	{i18n.BenefitsCareTitle, i18n.BenefitsCareBody},
+}
+
+// Benefits: authorised-claim wording only (healthy fats replacing saturated
+// fats, vitamin E) plus facts on taste, cooking and tradition. No cure claims.
+// Set as reading text with run-in titles, beside one photograph of the oil.
+templ Benefits(p Page) {
+	<section aria-labelledby="benefits-title" data-stage="grove" class="gutter section-y">
+		<div data-reveal>
+			<h2 id="benefits-title" class="text-step-head">
+				@Emphasis(p.T(i18n.BenefitsTitle), "")
+			</h2>
+			<p class="mt-6 max-w-[46ch] text-step-body">{ p.T(i18n.BenefitsIntro) }</p>
+		</div>
+		<div class="mt-12 grid gap-10 xl:grid-cols-[minmax(0,1fr)_14rem] xl:gap-14">
+			<div class="grid gap-x-10 gap-y-5 sm:grid-cols-2 xl:grid-cols-1">
+				@benefitList(p, nutritionBenefits, 0)
+				@benefitList(p, everydayBenefits, 3)
+			</div>
+			<figure data-reveal class="stagger-20 w-48 sm:w-56 xl:w-full">
+				<div class="rounded-img aspect-square">
+					@Picture(StaticImage(p.Asset, "oil-pour"), p.T(i18n.BenefitsImageAlt), "14rem", false, "drift block h-full w-full", "")
+				</div>
+			</figure>
+		</div>
+		<p data-reveal class="mt-10 max-w-[60ch] text-step-small text-ink-soft">{ p.T(i18n.BenefitsNote) }</p>
+		<a data-reveal href="#order" class={ textLink, "mt-4" }>
+			{ p.T(i18n.BenefitsCta) }
+			@IconArrowForward("size-5")
+		</a>
+	</section>
+}
+
+templ benefitList(p Page, items []benefit, from int) {
+	<ul class="space-y-5">
+		for i, b := range items {
+			<li data-reveal class={ staggerClass(float64(from+i) * 0.07) }>
+				<p class="max-w-[46ch]">
+					<strong class="font-semibold">{ p.T(b.title) }.</strong>
+					{ " " + p.T(b.body) }
+				</p>
+			</li>
+		}
+	</ul>
+}
+
+type reason struct {
+	key   string
+	title string
+	body  string
+}
+
+func reasons(p Page, d LandingData) []reason {
+	onssaBody := p.T(i18n.ReasonsOnssaBodyNoNumber)
+	if d.ONSSA != nil {
+		onssaBody = p.T(i18n.ReasonsOnssaBody, "number", d.ONSSA.Number)
+	}
+	out := []reason{
+		{"onssa", p.T(i18n.ReasonsOnssaTitle), onssaBody},
+		{"origin", p.T(i18n.ReasonsOriginTitle), p.T(i18n.ReasonsOriginBody)},
+		{"extra", p.T(i18n.ReasonsExtraTitle), p.T(i18n.ReasonsExtraBody)},
+		{"direct", p.T(i18n.ReasonsDirectTitle), p.T(i18n.ReasonsDirectBody)},
+		{"pay", p.T(i18n.ReasonsCodTitle), p.T(i18n.ReasonsCodBody)},
+	}
+	if d.Rating != nil {
+		out = append(out, reason{"reviews", p.T(i18n.ReasonsReviewsTitle, "average", d.Rating.AverageText), p.T(i18n.ReasonsReviewsBody, "count", d.Rating.CountText)})
+	}
+	if d.HasLab {
+		out = append(out, reason{"lab", p.T(i18n.ReasonsLabTitle), p.T(i18n.ReasonsLabBody)})
+	}
+	return out
+}
+
+// Reasons: the split ends. The grove runs the full width, then a moss field
+// answers "why this oil and not another?" with checkable facts in columns.
+// Facts that depend on data (reviews, lab reports) appear only with data.
+templ Reasons(p Page, d LandingData) {
+	<section aria-labelledby="reasons-title" class="olive-texture-dark bg-olive-700 text-limewash">
+		<div class="container-page pt-5 md:pt-10">
+			<div aria-hidden="true" class="rounded-img aspect-[16/9] bg-olive-900 sm:aspect-[3/1]">
+				@Picture(StaticImage(p.Asset, "grove-panorama"), "", "100vw", false, "drift block h-full w-full", "")
+			</div>
+		</div>
+		<div class="container-page section-y">
+			<h2 data-reveal id="reasons-title" class="text-step-head max-w-[24ch]">
+				@Emphasis(p.T(i18n.ReasonsTitle), "")
+			</h2>
+			<div class="mt-12 grid gap-12 lg:grid-cols-[minmax(0,4fr)_minmax(0,8fr)] lg:gap-20">
+			<div data-reveal>
+				<p class="max-w-[36ch] text-step-body">{ p.T(i18n.ReasonsIntro) }</p>
+				<a href="#order" class={ btn("lg"), actOnField, "mt-10" }>{ p.T(i18n.ReasonsCta) }</a>
+			</div>
+			<ul class="reason-columns">
+				for i, r := range reasons(p, d) {
+					<li data-reveal class={ staggerClass(float64(i) * 0.07), "mb-10" }>
+						<h3 class="text-step-lead">{ r.title }</h3>
+						<p class="mt-2 text-limewash/90">{ r.body }</p>
+						if r.key == "onssa" {
+							<a href="#onssa" class={ textLinkOnDark, "mt-1" }>{ p.T(i18n.ReasonsOnssaLink) }</a>
+						}
+						if r.key == "reviews" && d.Rating != nil {
+							@Stars(d.Rating.Average, "md", d.Rating.StarsLabel, "reason-stars", "mt-2")
+						}
+					</li>
+				}
+			</ul>
+			</div>
+		</div>
+	</section>
+}
+
+type onssaPoint struct {
+	title, body i18n.Key
+}
+
+var onssaPoints = []onssaPoint{
+	{i18n.OnssaPoint1Title, i18n.OnssaPoint1Body},
+	{i18n.OnssaPoint2Title, i18n.OnssaPoint2Body},
+	{i18n.OnssaPoint3Title, i18n.OnssaPoint3Body},
+}
+
+// OnssaSection: the food-safety authorisation as the object it is: the seal,
+// the number at figure size, the dates. Only data from Admin > Certificates.
+templ OnssaSection(p Page, d LandingData) {
+	<section id="onssa" aria-labelledby="onssa-title" data-stage="grove" class="gutter section-y scroll-mt-4">
+		<div data-reveal>
+			<h2 id="onssa-title" class="text-step-head">
+				@Emphasis(p.T(i18n.OnssaTitle), "")
+			</h2>
+			<p class="mt-6 max-w-[46ch] text-step-body">{ p.T(i18n.OnssaIntro) }</p>
+		</div>
+		@certificateCard(p, d.ONSSA)
+		<ul class="mt-12 max-w-[52ch] space-y-5">
+			for i, pt := range onssaPoints {
+				<li data-reveal class={ staggerClass(0.07 * float64(i)) }>
+					<p>
+						<strong class="font-semibold">{ p.T(pt.title) }.</strong>
+						{ " " + p.T(pt.body) }
+					</p>
+				</li>
+			}
+		</ul>
+	</section>
+}
+
+templ certificateCard(p Page, cert *Certificate) {
+	<div data-reveal class="stagger-10 sheet mt-12 grid items-center gap-8 overflow-hidden rounded-3xl px-6 py-10 sm:grid-cols-[auto_minmax(0,1fr)] sm:px-10">
+		<div data-reveal="stamp" class="stagger-30 w-fit">
+			@onssaSeal(p, cert)
+		</div>
+		<div class="min-w-0">
+			<h3 class="text-step-lead font-normal">{ p.T(i18n.OnssaCardTitle) }</h3>
+			if cert != nil {
+				<dl class="mt-4">
+					<dt class="text-step-small text-ink-soft">{ p.T(i18n.OnssaNumber) }</dt>
+					<dd class="text-step-head break-all tabular-nums" dir="ltr">{ cert.Number }</dd>
+					if cert.Issued != "" {
+						<div class="mt-4 flex flex-wrap gap-x-2">
+							<dt class="text-ink-soft">{ p.T(i18n.OnssaIssued) }</dt>
+							<dd class="font-medium">{ cert.Issued }</dd>
+						</div>
+					}
+					if cert.Expires != "" {
+						<div class="flex flex-wrap gap-x-2">
+							<dt class="text-ink-soft">{ p.T(i18n.OnssaExpires) }</dt>
+							<dd class="font-medium">{ cert.Expires }</dd>
+						</div>
+					}
+				</dl>
+			}
+			<div class="mt-6 flex flex-col items-start gap-1">
+				if cert != nil && cert.Scan.Valid() {
+					// Opens the scan in a <dialog> with JS; a plain link to the image without.
+					<a href={ templ.SafeURL(cert.Scan.Fallback) } data-dialog-open="onssa-scan" class={ textLink }>
+						@IconFileCheck2("size-5")
+						{ p.T(i18n.OnssaView) }
+					</a>
+					<dialog id="onssa-scan" class="m-auto max-h-[90dvh] w-[calc(100%-1.5rem)] max-w-2xl overflow-auto rounded-3xl bg-paper p-4 shadow-float backdrop:bg-ink/70 sm:p-6">
+						<div class="mb-4 flex items-center justify-between gap-4">
+							<h2 class="text-step-lead">{ p.T(i18n.OnssaCardTitle) }</h2>
+							<form method="dialog">
+								<button class="tap inline-flex items-center justify-center rounded-full hover:bg-sand" aria-label={ p.T(i18n.WhyUsClose) }>
+									@IconX("size-5")
+								</button>
+							</form>
+						</div>
+						@Picture(cert.Scan, cert.ScanAlt, "(min-width: 42rem) 40rem, 94vw", false, "", "h-auto object-contain")
+					</dialog>
+				}
+				@WALink(p, "onssa", p.T(i18n.OnssaAskMessage), textLink, "") {
+					@WhatsAppIcon("size-5 text-whatsapp-deep")
+					{ p.T(i18n.OnssaAsk) }
+				}
+			</div>
+		</div>
+	</div>
+}
+
+func sealLabel(p Page, cert *Certificate) string {
+	if cert != nil {
+		return p.T(i18n.OnssaSealLabel, "number", cert.Number)
+	}
+	return p.T(i18n.OnssaSealLabelNoNumber)
+}
+
+func sealNumberSize(n string) string {
+	if len(n) > 14 {
+		return "7.5"
+	}
+	return "10"
+}
+
+// onssaSeal: round ink seal; its Latin ring text runs left to right on both pages.
+templ onssaSeal(p Page, cert *Certificate) {
+	<svg viewBox="0 0 160 160" direction="ltr" class="size-36 text-olive-700 [direction:ltr] sm:size-44" role="img" aria-label={ sealLabel(p, cert) }>
+		<defs>
+			<path id="onssa-ring" d="M80 80 m-58 0 a58 58 0 1 1 116 0 a58 58 0 1 1 -116 0"></path>
+		</defs>
+		<g class="seal-spin">
+			<circle cx="80" cy="80" r="74" fill="none" stroke="currentColor" stroke-width="4"></circle>
+			<text fill="currentColor" font-size="10.5" font-weight="600" letter-spacing="2.2" font-family="var(--font-body-fr)">
+				<textPath href="#onssa-ring" startOffset="0">AUTORISATION SANITAIRE • ONSSA • MAROC •</textPath>
+			</text>
+		</g>
+		<circle cx="80" cy="80" r="46" fill="currentColor" fill-opacity="0.1"></circle>
+		if cert != nil {
+			<text x="80" y="80" text-anchor="middle" fill="currentColor" font-size="20" font-weight="700" font-family="var(--font-body-fr)">ONSSA</text>
+			<text x="80" y="98" text-anchor="middle" fill="currentColor" font-size={ sealNumberSize(cert.Number) } font-family="var(--font-body-fr)">{ cert.Number }</text>
+		} else {
+			<text x="80" y="86" text-anchor="middle" fill="currentColor" font-size="20" font-weight="700" font-family="var(--font-body-fr)">ONSSA</text>
+		}
+	</svg>
+}
+
+// WhyUs: the inverse close of the page. The promises (payment, delivery,
+// returns, privacy) as reading text, then the mill's telephone number set as
+// display type, the one way to reach a person. Texts from Admin > Content.
+templ WhyUs(p Page, d LandingData) {
+	<section aria-labelledby="why-title" class="olive-texture-dark bg-olive-950 text-limewash">
+		<div class="container-page section-y">
+			<div class="grid gap-12 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-20">
+				<div data-reveal>
+					<h2 id="why-title" class="text-step-head max-w-[14ch]">{ p.T(i18n.WhyUsTitle) }</h2>
+					<p class="mt-6 max-w-[40ch] text-step-body">{ p.T(i18n.WhyUsIntro) }</p>
+				</div>
+				<div class="reason-columns">
+					@assurance(p.T(i18n.WhyUsCodTitle), 0) {
+						{ d.CODText }
+					}
+					@assurance(p.T(i18n.WhyUsDeliveryTitle), 1) {
+						{ d.DeliveryText }
+						if d.DeliveryTime != "" {
+							{ " " + d.DeliveryTime }
+						}
+					}
+					@assurance(p.T(i18n.WhyUsReturnsTitle), 2) {
+						{ d.ReturnsText + " " }
+						@policyLink(p, "/terms")
+					}
+					@assurance(p.T(i18n.WhyUsPrivacyTitle), 3) {
+						{ d.PrivacyText + " " }
+						@policyLink(p, "/privacy")
+					}
+				</div>
+			</div>
+			if len(d.OtherCerts) > 0 {
+				<div data-reveal class="mt-16">
+					<h3 class="text-step-lead font-normal">{ p.T(i18n.WhyUsOtherCerts) }</h3>
+					<ul class="mt-3 space-y-1">
+						for _, c := range d.OtherCerts {
+							<li>
+								<span class="font-medium text-oil-bright">{ c.Label }</span>
+								<span class="text-limewash/80" dir="ltr">· { c.Number }</span>
+							</li>
+						}
+					</ul>
+				</div>
+			}
+			<div class="mt-16 lg:mt-24">
+				<p data-reveal class="max-w-[30ch] text-step-lead">{ p.T(i18n.WhyUsContactTitle) }</p>
+				<p data-reveal class="mt-2 max-w-[46ch] text-limewash/85">{ p.T(i18n.WhyUsContactBody) }</p>
+				if phone := p.FirstPhone(); phone != "" {
+					<a data-reveal href={ templ.SafeURL("tel:" + phone) } dir="ltr" class="stagger-10 mt-8 block w-fit text-step-figure transition-colors hover:text-oil-bright">
+						{ phoneDisplay(phone) }
+					</a>
+				}
+				<div data-reveal class="stagger-20 mt-10 flex flex-wrap items-center gap-x-8 gap-y-3">
+					@WALink(p, "why_us", "", btn("lg")+" btn-press inline-flex bg-whatsapp text-whatsapp-ink hover:brightness-95", "") {
+						@WhatsAppIcon("")
+						{ p.T(i18n.FinalCtaWhatsapp) }
+					}
+					if d.Delivered != "" {
+						<p class="text-limewash/85">
+							<span class="text-step-lead tabular-nums text-limewash">{ d.Delivered }</span>
+							{ " " + p.T(i18n.WhyUsDelivered) }
+						</p>
+					}
+				</div>
+				<dl class="mt-12 flex flex-wrap gap-x-10 gap-y-3 text-step-small text-limewash/85">
+					if d.Hours != "" {
+						@fact(p.T(i18n.WhyUsHours), d.Hours)
+					}
+					if d.ResponseTime != "" {
+						@fact(p.T(i18n.WhyUsResponseTime), d.ResponseTime)
+					}
+					if d.LegalName != "" {
+						@fact(p.T(i18n.WhyUsLegalName), d.LegalName)
+					}
+					if d.ICE != "" {
+						@fact(p.T(i18n.WhyUsIce), d.ICE)
+					}
+					if d.RC != "" {
+						@fact(p.T(i18n.WhyUsRc), d.RC)
+					}
+				</dl>
+			</div>
+		</div>
+	</section>
+}
+
+templ policyLink(p Page, rest string) {
+	<a href={ templ.SafeURL(p.LocalHref(rest)) } class={ textLinkOnDark }>
+		{ p.T(i18n.WhyUsReadMore) }
+	</a>
+}
+
+templ assurance(title string, i int) {
+	<div data-reveal class={ staggerClass(float64(i) * 0.07), "mb-10" }>
+		<h3 class="text-step-lead">{ title }</h3>
+		<p class="mt-2 text-limewash/90">
+			{ children... }
+		</p>
+	</div>
+}
+
+templ fact(label, value string) {
+	<div>
+		<dt class="text-limewash">{ label }</dt>
+		<dd>{ value }</dd>
+	</div>
+}
+
+type howStep struct {
+	icon             func(string) templ.Component
+	title, body, tag i18n.Key
+}
+
+var howSteps = []howStep{
+	{IconClipboardList, i18n.HowStep1Title, i18n.HowStep1Body, i18n.HowStep1Tag},
+	{IconMessageCircle, i18n.HowStep2Title, i18n.HowStep2Body, i18n.HowStep2Tag},
+	{IconTruck, i18n.HowStep3Title, i18n.HowStep3Body, i18n.HowStep3Tag},
+}
+
+// HowItWorks: three steps on a path across a dark olive band, each with its
+// picture, what it takes, and a gold close: you pay at the door.
+templ HowItWorks(p Page) {
+	<section aria-labelledby="how-title" class="olive-texture-dark bg-olive-950 text-limewash">
+		<div class="container-page section-y">
+			<div data-reveal class="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+				<div>
+					<h2 id="how-title" class="text-step-head max-w-[16ch]">
+						@Emphasis(p.T(i18n.HowTitle), "")
+					</h2>
+					<p class="mt-6 max-w-[40ch] text-step-body text-limewash/85">{ p.T(i18n.HowIntro) }</p>
+				</div>
+				<a href="#order" class={ btn("lg", "whitespace-normal"), actOnField, "w-fit max-w-full text-center" }>
+					{ p.T(i18n.HowCta) }
+					@IconArrowForward("")
+				</a>
+			</div>
+			<ol class="how-path relative mt-14 grid gap-4 lg:grid-cols-3 lg:gap-6">
+				for i, s := range howSteps {
+					<li data-reveal class={ staggerClass(0.1 + float64(i)*0.1), "relative flex flex-col rounded-3xl bg-olive-900 p-6 sm:p-7" }>
+						<span class="sr-only">{ p.T(i18n.HowStepLabel, "n", strconv.Itoa(i+1)) }: </span>
+						<div class="flex flex-wrap items-center gap-4">
+							<span class="how-dot relative z-10 flex size-16 shrink-0 items-center justify-center rounded-full bg-olive-400 text-olive-950">
+								@s.icon("size-7")
+								<span aria-hidden="true" class="absolute -end-1 -top-1 flex size-7 items-center justify-center rounded-full bg-oil-bright text-step-small font-bold text-olive-950">{ strconv.Itoa(i + 1) }</span>
+							</span>
+							<h3 class="text-step-lead">{ p.T(s.title) }</h3>
+						</div>
+						<p class="mt-5 text-limewash/85">{ p.T(s.body) }</p>
+						<p class="mt-auto pt-6">
+							<span class="inline-flex items-center gap-2 rounded-full bg-limewash/10 px-3.5 py-1.5 text-step-small text-olive-200">
+								@IconCheck("size-4")
+								{ p.T(s.tag) }
+							</span>
+						</p>
+					</li>
+				}
+			</ol>
+			<p data-reveal class="stagger-40 mt-4 flex items-center gap-4 rounded-3xl bg-oil-bright px-6 py-5 font-semibold text-olive-950 lg:mt-6">
+				<span class="flex size-11 shrink-0 items-center justify-center rounded-full bg-olive-950 text-oil-bright">
+					@IconBanknote("size-5")
+				</span>
+				{ p.T(i18n.OrderFormPayOnDelivery) }
+			</p>
+		</div>
+	</section>
+}
+
+var storyProcess = [][2]i18n.Key{
+	{i18n.StoryProcess1Title, i18n.StoryProcess1Body},
+	{i18n.StoryProcess2Title, i18n.StoryProcess2Body},
+	{i18n.StoryProcess3Title, i18n.StoryProcess3Body},
+	{i18n.StoryProcess4Title, i18n.StoryProcess4Body},
+}
+
+// Story: the mill's own letter in one narrow column, one wide photograph of
+// the grove beside it, the way from tree to bottle as reading text, then the
+// gallery from Admin > Content.
+templ Story(p Page, d LandingData) {
+	<section aria-labelledby="story-title" class="section-y">
+		<div class="container-page grid gap-12 lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] lg:gap-20">
+			<div class="max-w-[36rem]">
+				<h2 data-reveal id="story-title" class="text-step-head">{ d.StoryTitle }</h2>
+				<div data-reveal class="stagger-10 mt-8 space-y-5 text-step-body">
+					for _, para := range d.StoryParagraphs {
+						<p>{ para }</p>
+					}
+				</div>
+				<p data-reveal class="mt-8 text-step-lead">{ p.SiteName() }</p>
+				<p class="text-ink-soft">{ p.T(i18n.BrandPlace) }</p>
+			</div>
+			<div class="min-w-0">
+				<figure data-reveal class="stagger-15 rounded-img aspect-[4/3] bg-olive-900">
+					@Picture(StaticImage(p.Asset, "grove-green"), "", "(min-width: 64rem) 40vw, 100vw", false, "drift block h-full w-full", "")
+				</figure>
+				<h3 data-reveal class="mt-12 text-step-lead font-normal">{ p.T(i18n.StoryProcessTitle) }</h3>
+				<ol class="mt-5 space-y-4">
+					for i, step := range storyProcess {
+						<li data-reveal class={ staggerClass(float64(i) * 0.07) }>
+							<p>
+								<strong class="font-semibold">{ p.T(step[0]) }.</strong>
+								{ " " + p.T(step[1]) }
+							</p>
+						</li>
+					}
+				</ol>
+			</div>
+		</div>
+		if len(d.Gallery) > 0 {
+			<div class="container-page mt-24">
+				<h3 data-reveal class="text-step-lead font-normal">{ p.T(i18n.StoryGalleryTitle) }</h3>
+				<ul class="mt-6 grid grid-cols-2 gap-2 md:grid-cols-4">
+					for i, g := range d.Gallery {
+						<li data-reveal class={ staggerClass(float64(i%4) * 0.07) }>
+							<figure>
+								<div class="rounded-img aspect-[4/5] bg-olive-900">
+									@Picture(g.Image, g.Caption, "(min-width: 48rem) 22vw, 45vw", false, "block h-full w-full", "")
+								</div>
+								if g.Caption != "" {
+									<figcaption class="mt-2 text-step-small text-ink-soft">{ g.Caption }</figcaption>
+								}
+							</figure>
+						</li>
+					}
+				</ul>
+			</div>
+		}
+	</section>
+}
+
+// Faq: answers as reading text, everything visible at a glance (no toggles);
+// FAQPage JSON-LD in <head>.
+templ Faq(p Page, d LandingData) {
+	if len(d.FAQs) > 0 {
+		<section id="faq" aria-labelledby="faq-title" class="section-y scroll-mt-4">
+			<div class="container-page grid gap-12 lg:grid-cols-[minmax(0,4fr)_minmax(0,8fr)] lg:gap-16">
+				<div data-reveal>
+					<h2 id="faq-title" class="text-step-head max-w-[12ch]">{ p.T(i18n.FaqTitle) }</h2>
+					<p class="mt-6">
+						{ p.T(i18n.FaqMore) + " " }
+						@WALink(p, "faq_more", "", textLink, "") {
+							{ p.T(i18n.FaqMoreLink) }
+						}
+					</p>
+				</div>
+				<div class="faq-columns">
+					for i, f := range d.FAQs {
+						<div data-reveal class={ staggerClass(float64(min(i, 8)) * 0.05), "pb-8" }>
+							<h3 class="font-semibold">{ f.Question }</h3>
+							<div class="rich-text mt-1">
+								@RichText(f.Answer)
+							</div>
+						</div>
+					}
+				</div>
+			</div>
+		</section>
+	}
+}
+
+// FinalCTA: a plain sentence and one action, on the ground.
+templ FinalCTA(p Page) {
+	<section aria-labelledby="final-cta-title" class="container-page pt-24 pb-32 md:pt-40">
+		<div data-reveal class="max-w-[34ch]">
+			<h2 id="final-cta-title" class="text-step-lead">{ p.T(i18n.FinalCtaTitle) }</h2>
+			if p.WAHref("") != "" {
+				<p class="mt-2 text-ink-soft">{ p.T(i18n.FinalCtaBody) }</p>
+			}
+			<div class="mt-6 flex flex-wrap items-center gap-x-8 gap-y-3">
+				<a href="#order" class={ btn("md"), actPrimary }>{ p.T(i18n.FinalCtaOrder) }</a>
+				@WALink(p, "final_cta", "", textLink, "") {
+					@WhatsAppIcon("size-5 text-whatsapp-deep")
+					{ p.T(i18n.FinalCtaWhatsapp) }
+				}
+			</div>
+		</div>
+	</section>
+}
