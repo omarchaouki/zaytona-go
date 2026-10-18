@@ -95,7 +95,7 @@ jobs:
           configPath: .github/lighthouserc.json
           uploadArtifacts: true
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: server-log
           path: server.log
