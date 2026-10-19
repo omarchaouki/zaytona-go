@@ -80,6 +80,12 @@ Go rewrite of the Huilerie El Hadaji site. Spec: [PROMPT.md](PROMPT.md), securit
   - A refused POST answered in place (422) keeps the address of the page it was sent from, so a reload never re-posts. Links with `download` (CSV export) or `data-no-swap`, and `/static`, `/uploads`, `/api` paths are left to the browser.
   - Without JS nothing changes: links and forms are plain.
 - **Empty file inputs (bug found while testing in-place posts).** A file input left empty is sent by browsers as a part with `filename=""`, which Go reads as an empty text value: the review form refused every review without a photo (400 "unexpected form field"), and admin forms with an optional photo would have too. The allow-lists now accept an empty value for a declared file field only (`emptyValues` in `internal/web/admin/fields.go`, the `photo` case in `reviewFieldsOK`); tests send what a browser sends.
+- **Production on Supabase and nginx (owner request, 2026-10-19).** The database is Supabase (managed PostgreSQL); the app, its uploads and nginx run on an Ubuntu VPS. Changes for it:
+  - `00002_lock_data_api.sql`: where the roles `anon`/`authenticated` exist (Supabase), every grant to them is revoked (also default privileges) and row-level security is on for every table; nothing changes on a plain PostgreSQL. Tested with those roles created in the embedded database (`TestDataAPIRolesLockedOut`).
+  - Config: a remote `DATABASE_URL` in production needs `sslmode=require|verify-ca|verify-full`; the Supabase transaction pooler (port 6543) is refused (`TestDatabaseURLRules`). New `HOST` (listen address, `127.0.0.1` behind the proxy).
+  - The 5 s statement timeout is set after connecting (`set_config`) instead of as a startup parameter, so it holds behind the session pooler (`TestStatementTimeoutOnEveryConnection`).
+  - nginx site and TLS snippet in `deploy/nginx/`, nightly database and photo backup in `deploy/backup.sh` (the free plan has no backups), the whole procedure in `docs/DEPLOY_UBUNTU.md`. Caddy stays documented as the alternative.
+  - Not verified against a real Supabase project from here (no access): the pooler's certificate with `verify-full` is the one point to check on the first deploy (the guide falls back to `sslmode=require`).
 - **New UI strings for milestone 6** (flagged for review): `reviews.form.noscript`, `admin.nav.reviewsShort`, `admin.reviews.{rejectShort,deleteBody}`, `admin.dashboard.pendingReviews`.
 
 ## Stack (installed versions)

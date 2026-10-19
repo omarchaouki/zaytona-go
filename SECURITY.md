@@ -77,7 +77,10 @@ Set by `internal/httpx` on every response:
 - pgx v5 >= 5.9.2, default extended protocol only (never `QueryExecModeSimpleProtocol`; CVE-2026-41889 affects the simple protocol path).
 - All SQL through sqlc. Dynamic filters use fixed SQL with nullable parameters (`sqlc.narg`) or a whitelist of sort columns mapped to fixed SQL fragments. Grep test: no `fmt.Sprintf` / string concatenation feeding `Exec`/`Query`.
 - App DB role has no superuser, no `CREATE` on schema in production; migrations run with a separate role (documented, optional for small VPS).
-- Statement timeout per query context (default 5 s) and pool limits.
+- Statement timeout per query context (default 5 s) and pool limits. It is set on each new connection with one fixed, parameterised `set_config` call in `internal/db` (outside sqlc: connection setup, not a query of the app), so it also holds behind a session pooler.
+- A remote database is reached over TLS only: in production the app refuses a non-local `DATABASE_URL` without `sslmode=require`, `verify-ca` or `verify-full` (prefer `verify-full` with the provider's CA in `sslrootcert`).
+- Hosted databases that publish tables over an HTTP API (Supabase's Data API, roles `anon` and `authenticated`): migration `00002_lock_data_api.sql` removes every right of those roles (existing and future tables) and turns on row-level security on every table, so orders and other personal data cannot be read with the public API key; the app connects as the owner of the tables. Turn the Data API off in the dashboard as well. New tables in later migrations get no grants to those roles (default privileges); enable row-level security on them in the same migration.
+- Supabase's transaction pooler (port 6543) is refused at start (prepared statements and session settings would break); use the direct connection or the session pooler.
 
 ## 9. Uploads and images (highest RCE / DoS risk)
 

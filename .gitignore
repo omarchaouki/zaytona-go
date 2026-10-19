@@ -36,8 +36,10 @@ tests/e2e/screenshots/
 .vscode/
 .DS_Store
 Thumbs.db
-.claude/          # Added to ignore Claude local config
+# Claude Code local config and skills (comments must be on their own line)
+.claude/
 
 # Design tooling (taste-skill working files)
 .taste-skill/
-taste-skill/      # Added in case it doesn't have the dot prefix
+# Same, in case the folder has no dot prefix
+taste-skill/

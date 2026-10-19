@@ -74,8 +74,9 @@ All configuration comes from the environment (`.env` in development). `.env` is 
 | --- | --- | --- |
 | `APP_ENV` | `production` | `development` or `production` (production refuses the example secret and requires https for webhooks) |
 | `PORT` | `3000` | HTTP port |
+| `HOST` | (every interface) | Listen address; `127.0.0.1` behind nginx or Caddy on the same machine |
 | `SITE_URL` | `http://localhost:3000` | Public URL (canonical links, sitemap, cookies: `https` gives the `__Host-` session cookie) |
-| `DATABASE_URL` | | `postgres://user:password@host:5432/db` |
+| `DATABASE_URL` | | `postgres://user:password@host:5432/db`. In production a remote database must use TLS (`sslmode=require`, better `verify-full` with `sslrootcert`). Supabase: the direct connection or the session pooler (port 5432), never the transaction pooler (6543); see [docs/DEPLOY_UBUNTU.md](docs/DEPLOY_UBUNTU.md) |
 | `DATABASE_POOL_MAX` | `10` | Connection pool size |
 | `APP_SECRET` | | 32+ random bytes in hex. Every key (sessions, form tokens, confirmation links, proof of work, TOTP encryption, phone and IP hashes, webhook signature) is derived from it (HKDF) |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` (JSON logs, phones and IPs redacted) |
@@ -119,6 +120,8 @@ The end-to-end tests and the audit with `AUDIT_ORDER=1` place real orders: run t
 Pages change in place like a single-page app, but every page stays server-rendered: `web/static/js/lib/nav.js` fetches same-site links and form posts and swaps the page in (history, back/forward, scroll and focus kept), falling back to a normal load whenever a swap could be wrong. Page code registers with `onPage(fn)` and gets an `AbortSignal` for anything it starts on `window`, `document` or a timer. Without JavaScript every link and form works as a plain request. Add `data-no-swap` to a link or form that must load the browser's way.
 
 ## Deployment (VPS)
+
+Step-by-step for Ubuntu with nginx, Let's Encrypt and a Supabase database: [docs/DEPLOY_UBUNTU.md](docs/DEPLOY_UBUNTU.md). The steps below are the same with a local PostgreSQL and Caddy.
 
 1. **PostgreSQL 16.** Create a database and a login role that owns nothing but that database (no superuser). Migrations can run with a separate owner role if you prefer; the app role then needs only `SELECT, INSERT, UPDATE, DELETE` on the tables and `USAGE` on the sequence.
 2. **Binary.** `task build` produces `bin/zaytona` (static, `CGO_ENABLED=0`, `-tags nodynamic`). Copy it to `/opt/zaytona/zaytona`.

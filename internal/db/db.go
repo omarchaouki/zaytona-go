@@ -29,7 +29,9 @@ func Migrations() fs.FS {
 }
 
 // Open creates a pgx pool using the extended protocol only, with decimal support
-// and a per-statement timeout.
+// and a per-statement timeout. The timeout is set with SET after connecting
+// rather than as a startup parameter, which connection poolers (Supabase's
+// session pooler) may not pass on.
 func Open(ctx context.Context, url string, maxConns int32) (*pgxpool.Pool, error) {
 	cfg, err := pgxpool.ParseConfig(url)
 	if err != nil {
@@ -40,12 +42,8 @@ func Open(ctx context.Context, url string, maxConns int32) (*pgxpool.Pool, error
 	}
 	cfg.MaxConns = maxConns
 	cfg.MaxConnIdleTime = 5 * time.Minute
-	cfg.ConnConfig.RuntimeParams["statement_timeout"] = "5000"
 	cfg.ConnConfig.RuntimeParams["application_name"] = "zaytona"
-	cfg.AfterConnect = func(_ context.Context, c *pgx.Conn) error {
-		pgxdecimal.Register(c.TypeMap())
-		return nil
-	}
+	cfg.AfterConnect = afterConnect("5000")
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, err
@@ -88,7 +86,7 @@ func MigrateDownAll(ctx context.Context, pool *pgxpool.Pool) error {
 // take longer); it is closed with the provider.
 func provider(ctx context.Context, pool *pgxpool.Pool) (*goose.Provider, func(), error) {
 	cfg := pool.Config()
-	cfg.ConnConfig.RuntimeParams["statement_timeout"] = "0"
+	cfg.AfterConnect = afterConnect("0")
 	cfg.MaxConns = 2
 	mpool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
@@ -108,3 +106,13 @@ func provider(ctx context.Context, pool *pgxpool.Pool) (*goose.Provider, func(),
 }
 
 func closeQuietly(db *sql.DB) { _ = db.Close() }
+
+// afterConnect registers the decimal type and sets the statement timeout
+// (milliseconds, "0" for none) on every new connection.
+func afterConnect(timeoutMS string) func(context.Context, *pgx.Conn) error {
+	return func(ctx context.Context, c *pgx.Conn) error {
+		pgxdecimal.Register(c.TypeMap())
+		_, err := c.Exec(ctx, "select set_config('statement_timeout', $1, false)", timeoutMS)
+		return err
+	}
+}

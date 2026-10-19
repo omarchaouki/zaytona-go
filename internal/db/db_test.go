@@ -41,6 +41,80 @@ func TestMigrateUpDownUp(t *testing.T) {
 	}
 }
 
+// On a Supabase-like database (roles anon and authenticated, which the Data
+// API uses, with default access to new tables), migration 00002 takes every
+// right away from those roles and turns row-level security on; the app, owner
+// of the tables, still reads and writes.
+func TestDataAPIRolesLockedOut(t *testing.T) {
+	pool := dbtest.NewDatabase(t, pgURL)
+	ctx := context.Background()
+	for _, stmt := range []string{
+		`do $$ begin
+			if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon nologin; end if;
+			if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated nologin; end if;
+		end $$`,
+		`alter default privileges in schema public grant all on tables to anon, authenticated`,
+		`alter default privileges in schema public grant all on sequences to anon, authenticated`,
+	} {
+		if _, err := pool.Exec(ctx, stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := db.MigrateDownAll(ctx, pool); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Migrate(ctx, pool); err != nil {
+		t.Fatal(err)
+	}
+	var open []string
+	rows, err := pool.Query(ctx, `select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
+		where n.nspname = 'public' and c.relkind = 'r'
+		and (not c.relrowsecurity or has_table_privilege('anon', c.oid, 'select') or has_table_privilege('authenticated', c.oid, 'insert'))`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			t.Fatal(err)
+		}
+		open = append(open, name)
+	}
+	if rows.Err() != nil {
+		t.Fatal(rows.Err())
+	}
+	if len(open) > 0 {
+		t.Fatalf("tables open to the Data API roles: %v", open)
+	}
+	// The app (owner) is not limited by row-level security.
+	var n int
+	if err := pool.QueryRow(ctx, "select count(*) from offers").Scan(&n); err != nil {
+		t.Fatalf("owner read: %v", err)
+	}
+}
+
+// Every application connection carries the 5 s statement timeout (set after
+// connecting, so it also holds behind a session pooler).
+func TestStatementTimeoutOnEveryConnection(t *testing.T) {
+	pool := dbtest.NewDatabase(t, pgURL)
+	ctx := context.Background()
+	for range 3 {
+		conn, err := pool.Acquire(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var v string
+		err = conn.QueryRow(ctx, "show statement_timeout").Scan(&v)
+		conn.Release()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if v != "5s" {
+			t.Fatalf("statement_timeout = %q", v)
+		}
+	}
+}
+
 func TestOrderReferencesAreUniqueUnderConcurrency(t *testing.T) {
 	pool := dbtest.NewDatabase(t, pgURL)
 	s := store.New(pool)

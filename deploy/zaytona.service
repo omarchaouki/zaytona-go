@@ -3,6 +3,7 @@
 # uploads at /var/lib/zaytona/uploads. Then: systemctl daemon-reload && systemctl enable --now zaytona
 [Unit]
 Description=Huilerie El Hadaji web app
+# postgresql.service only matters when the database is on this machine (not with Supabase).
 After=network-online.target postgresql.service
 Wants=network-online.target
 
@@ -11,7 +12,8 @@ Type=simple
 User=zaytona
 Group=zaytona
 EnvironmentFile=/etc/zaytona/zaytona.env
-Environment=APP_ENV=production UPLOAD_DIR=/var/lib/zaytona/uploads TRUST_PROXY=true
+# Behind nginx or Caddy on the same machine: listen on loopback only.
+Environment=APP_ENV=production UPLOAD_DIR=/var/lib/zaytona/uploads TRUST_PROXY=true HOST=127.0.0.1 PORT=3000
 ExecStart=/opt/zaytona/zaytona serve
 Restart=on-failure
 RestartSec=3

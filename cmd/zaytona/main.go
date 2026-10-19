@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -181,10 +182,10 @@ func serve(ctx context.Context, cfg *config.Config, s *store.Store) error {
 		Logger:   logger,
 		Notifier: notifier,
 	})
-	srv := web.NewServer(fmt.Sprintf(":%d", cfg.Port), h)
+	srv := web.NewServer(net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port)), h)
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()
-	logger.Info("listening", "port", cfg.Port, "env", cfg.Env)
+	logger.Info("listening", "host", cfg.Host, "port", cfg.Port, "env", cfg.Env)
 	select {
 	case err := <-errc:
 		return err

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"strconv"
@@ -21,6 +22,7 @@ const ExampleSecret = "change-me-change-me-change-me-change-me-change-me-0000"
 type Config struct {
 	Env             string // "development" or "production"
 	Port            int
+	Host            string // listen address; "" = every interface, 127.0.0.1 behind a local proxy
 	LogLevel        string
 	DatabaseURL     string
 	DatabasePoolMax int32
@@ -88,6 +90,9 @@ func FromLookup(lookup func(string) (string, bool)) (*Config, error) {
 	if c.Port, err = intInRange(get("PORT", "3000"), 1, 65535); err != nil {
 		errs = append(errs, fmt.Errorf("PORT: %w", err))
 	}
+	if c.Host = get("HOST", ""); c.Host != "" && net.ParseIP(c.Host) == nil {
+		errs = append(errs, fmt.Errorf("HOST must be an IP address such as 127.0.0.1, got %q", c.Host))
+	}
 	pool, err := intInRange(get("DATABASE_POOL_MAX", "10"), 1, 200)
 	if err != nil {
 		errs = append(errs, fmt.Errorf("DATABASE_POOL_MAX: %w", err))
@@ -104,6 +109,8 @@ func FromLookup(lookup func(string) (string, bool)) (*Config, error) {
 		errs = append(errs, errors.New("DATABASE_URL is required"))
 	} else if u, err := url.Parse(c.DatabaseURL); err != nil || (u.Scheme != "postgres" && u.Scheme != "postgresql") {
 		errs = append(errs, errors.New("DATABASE_URL must be a postgres:// URL"))
+	} else {
+		errs = append(errs, checkDatabaseURL(u, c.IsProduction())...)
 	}
 
 	secret := get("APP_SECRET", "")
@@ -148,6 +155,32 @@ func FromLookup(lookup func(string) (string, bool)) (*Config, error) {
 		return nil, errors.Join(errs...)
 	}
 	return c, nil
+}
+
+// checkDatabaseURL refuses settings that would work badly or unsafely:
+//   - a remote database in production without TLS (the URL must say
+//     sslmode=require, or better verify-full with the provider's CA);
+//   - Supabase's transaction pooler (port 6543): it hands each statement to
+//     any server connection, which breaks the prepared statements and session
+//     settings this app relies on. Use the session pooler or a direct connection.
+func checkDatabaseURL(u *url.URL, production bool) []error {
+	var errs []error
+	host := u.Hostname()
+	if host == "" {
+		host = u.Query().Get("host") // unix socket in the query string
+	}
+	local := host == "" || host == "localhost" || strings.HasPrefix(host, "/") || net.ParseIP(host).IsLoopback()
+	if production && !local {
+		switch u.Query().Get("sslmode") {
+		case "require", "verify-ca", "verify-full":
+		default:
+			errs = append(errs, errors.New("DATABASE_URL: a remote database needs TLS: add ?sslmode=verify-full&sslrootcert=/path/to/ca.crt (or at least sslmode=require)"))
+		}
+	}
+	if strings.HasSuffix(host, ".pooler.supabase.com") && u.Port() == "6543" {
+		errs = append(errs, errors.New("DATABASE_URL: Supabase transaction pooler (port 6543) is not supported; use the session pooler (same host, port 5432) or the direct connection"))
+	}
+	return errs
 }
 
 func intInRange(s string, lo, hi int) (int, error) {
