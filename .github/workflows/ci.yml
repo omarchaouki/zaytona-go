@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: actions/setup-go@v6
@@ -65,7 +65,7 @@ jobs:
       AUDIT_ADMIN_PASSWORD: ci-owner-password-after-change
       BASE_URL: http://localhost:3000
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: actions/setup-go@v6
@@ -115,7 +115,7 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U olive" --health-interval 5s --health-retries 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Build the production image
