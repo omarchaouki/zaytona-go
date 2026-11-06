@@ -28,8 +28,8 @@ from n
 returning *;
 
 -- name: CreateOrderItem :exec
-insert into order_items (order_id, offer_id, name_ar, name_fr, liters, unit_price, quantity, position)
-values ($1, $2, $3, $4, $5, $6, $7, $8);
+insert into order_items (order_id, offer_id, name_ar, name_fr, liters, unit_price, quantity, position, grams)
+values ($1, $2, $3, $4, $5, $6, $7, $8, $9);
 
 -- name: CreateOrderEvent :exec
 insert into order_events (order_id, admin_id, kind, from_status, to_status, note)

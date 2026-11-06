@@ -15,7 +15,12 @@ import (
 
 // offerImage is the photo of an offer without its own upload (same photo on
 // every offer, as in the reference).
-const offerImage = "oil-pour"
+// Default photos of the products (an offer's own upload wins): the mill's
+// labelled 5 L bottle for oil, a jar for amlou.
+const (
+	offerImage = "oil-bottle"
+	jarImage   = "amlou-jars"
+)
 
 // buildLanding localises and formats SiteData for the landing view.
 func (h *Handlers) buildLanding(p view.Page, d *store.SiteData) view.LandingData {
@@ -43,7 +48,7 @@ func (h *Handlers) buildLanding(p view.Page, d *store.SiteData) view.LandingData
 		HeroEyebrow:  orDefault(hero.Eyebrow, t(i18n.HeroEyebrow)),
 		HeroTitle:    orDefault(hero.Title, t(i18n.HeroTitle)),
 		HeroSubtitle: orDefault(hero.Subtitle, t(i18n.HeroSubtitle)),
-		HeroImage:    view.StaticImage(p.Asset, "olives-golden-hour"),
+		HeroImage:    view.StaticImage(p.Asset, "oil-bottles"),
 		HasLab:       d.LabReports > 0,
 	}
 
@@ -62,13 +67,27 @@ func (h *Handlers) buildLanding(p view.Page, d *store.SiteData) view.LandingData
 		}
 	}
 
-	// Offers and the price anchor (cheapest in stock).
-	img := view.StaticImage(p.Asset, offerImage)
+	// Offers (oil by the litre, then jars) and the price anchor (cheapest oil in stock).
+	oilImg, jarImg := view.StaticImage(p.Asset, offerImage), view.StaticImage(p.Asset, jarImage)
 	unit := t(i18n.OrderFormLitersUnit)
+	firstTier := 0
+	if tiers := s.Pricing.SortedTiers(); len(tiers) > 0 {
+		firstTier = tiers[0].MinLiters
+	}
 	for _, o := range d.Offers {
 		name := pick(o.NameAr, o.NameFr)
+		jar := o.Kind == dbq.OfferKindJar
+		if jar && (o.Grams == nil || !o.PriceMad.IsPositive()) {
+			continue // no price yet: not on sale
+		}
 		size := domain.FormatNumber(o.Liters) + " " + unit
+		img := oilImg
+		if jar {
+			size = t(i18n.ProductsJarSize, "grams", strconv.Itoa(int(*o.Grams)))
+			img = jarImg
+		}
 		card := view.OfferCard{
+			Jar:        jar,
 			Slug:       o.Slug,
 			Name:       name,
 			SizeLabel:  size,
@@ -83,12 +102,20 @@ func (h *Handlers) buildLanding(p view.Page, d *store.SiteData) view.LandingData
 		if o.ImageID != nil && o.ImageWidth != nil && o.ImageHeight != nil {
 			card.Image = view.MediaImage(*o.ImageID, ints(o.ImageWidths), int(*o.ImageWidth), int(*o.ImageHeight))
 		}
+		if jar {
+			out.Jars = append(out.Jars, card)
+			continue
+		}
 		if o.Liters.IsPositive() {
 			card.PerLiter = domain.FormatMAD(o.PriceMad.Div(o.Liters), loc)
 		}
+		// Automatic price at a volume tier: the card says so.
+		card.TierPrice = o.AutoPrice && firstTier > 0 && o.Liters.GreaterThanOrEqual(decimal.NewFromInt(int64(firstTier)))
 		out.Offers = append(out.Offers, card)
 	}
-	setOfferFill(out.Offers, d.Offers)
+	for _, tr := range s.Pricing.SortedTiers() {
+		out.Tiers = append(out.Tiers, t(i18n.ProductsTierLine, "liters", strconv.Itoa(tr.MinLiters), "price", domain.FormatMAD(tr.PricePerLiter, loc)))
+	}
 	if from, ok := cheapestOffer(d.Offers); ok {
 		out.PriceFrom = domain.FormatMAD(from, loc)
 		if ppl := s.Pricing.PricePerLiter; ppl.Valid {
@@ -103,6 +130,7 @@ func (h *Handlers) buildLanding(p view.Page, d *store.SiteData) view.LandingData
 			Max:         pr.CustomMaxLiters,
 			Body:        t(i18n.ProductsCustomBody, "min", strconv.Itoa(pr.CustomMinLiters), "max", strconv.Itoa(pr.CustomMaxLiters)),
 			Hint:        t(i18n.ProductsGaugeHint, "min", strconv.Itoa(pr.CustomMinLiters), "max", strconv.Itoa(pr.CustomMaxLiters)),
+			Tiers:       tiersJSON(pr),
 		}
 	}
 
@@ -175,7 +203,8 @@ func cheapestOffer(offers []dbq.ListActiveOffersWithImageRow) (decimal.Decimal, 
 	var best decimal.Decimal
 	found := false
 	for _, o := range offers {
-		if o.StockStatus == dbq.StockStatusOutOfStock || !o.PriceMad.IsPositive() {
+		// The anchor is the price of oil: jars are another product.
+		if o.Kind != dbq.OfferKindOil || o.StockStatus == dbq.StockStatusOutOfStock || !o.PriceMad.IsPositive() {
 			continue
 		}
 		if !found || o.PriceMad.LessThan(best) {
@@ -215,25 +244,4 @@ func ints(in []int32) []int {
 		out[i] = int(v)
 	}
 	return out
-}
-
-// setOfferFill sets how full each offer's drawn jerrycan is: its litres
-// against the largest offer, in steps of 10% (at least 20%, so it shows).
-func setOfferFill(cards []view.OfferCard, offers []dbq.ListActiveOffersWithImageRow) {
-	largest := decimal.Zero
-	for _, o := range offers {
-		if o.Liters.GreaterThan(largest) {
-			largest = o.Liters
-		}
-	}
-	if !largest.IsPositive() {
-		return
-	}
-	for i := range cards {
-		if i >= len(offers) {
-			return
-		}
-		pct := int(offers[i].Liters.Div(largest).Mul(decimal.NewFromInt(10)).Round(0).IntPart()) * 10
-		cards[i].Fill = min(max(pct, 20), 100)
-	}
 }

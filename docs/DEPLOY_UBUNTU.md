@@ -263,6 +263,12 @@ sudo install -o root -g root -m 0755 ~/zaytona-go/bin/zaytona /opt/zaytona/zayto
 sudo sh -c 'set -a; . /etc/zaytona/zaytona.env; set +a; /opt/zaytona/zaytona migrate' && sudo systemctl restart zaytona
 ```
 
+When an update adds seed content (for example the hidden amlou jar of November 2026), run the seed once more. It only adds what is missing and never changes an existing row, so your prices and reviews stay as they are. One thing to know: a demo offer you deleted (same slug) comes back, flagged demo; hide or delete it again in Admin > Offres.
+
+```bash
+sudo sh -c 'set -a; . /etc/zaytona/zaytona.env; set +a; /opt/zaytona/zaytona seed'
+```
+
 ## Troubleshooting
 
 | Symptom | Cause and fix |

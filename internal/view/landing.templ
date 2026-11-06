@@ -28,8 +28,8 @@ templ Landing(p Page, d LandingData, f OrderFormData) {
 		<div class="stage-split" data-stage-split>
 			@Stage([]StageShot{
 				{Key: "hero", Image: d.HeroImage, Pos: "pos-50-40"},
-				{Key: "harvest", Image: StaticImage(p.Asset, "olives-harvest"), Alt: p.T(i18n.HeroImageAlt), Pos: "pos-50-30"},
-				{Key: "grove", Image: StaticImage(p.Asset, "grove-path"), Pos: "pos-50-60"},
+				{Key: "harvest", Image: StaticImage(p.Asset, "olives-pile"), Alt: p.T(i18n.HeroImageAlt), Pos: "pos-50-40"},
+				{Key: "grove", Image: StaticImage(p.Asset, "olives-crates"), Pos: "pos-50-60"},
 			}, d.HeroEyebrow)
 			<div class="reading">
 				@Hero(p, d)
@@ -100,22 +100,50 @@ templ Offers(p Page, d LandingData) {
 			<h2 id="products-title" class="text-step-head">{ p.T(i18n.ProductsTitle) }</h2>
 			<p class="mt-6 max-w-[46ch] text-step-body">{ p.T(i18n.ProductsIntro) }</p>
 		</div>
-		if len(d.Offers) == 0 && d.Custom == nil {
+		if len(d.Offers) == 0 && d.Custom == nil && len(d.Jars) == 0 {
 			<p data-reveal class="sheet mt-12 max-w-[46ch] rounded-3xl px-6 py-8">{ p.T(i18n.ProductsEmpty) }</p>
 		} else {
 			if len(d.Offers) > 0 {
-				<ul class="mt-12 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+				if len(d.Jars) > 0 {
+					<h3 data-reveal class="mt-12 text-step-lead">{ p.T(i18n.ProductsOilTitle) }</h3>
+				}
+				<ul class={ "grid gap-4 sm:grid-cols-2 xl:grid-cols-3", templ.KV("mt-5", len(d.Jars) > 0), templ.KV("mt-12", len(d.Jars) == 0) }>
 					for i, o := range d.Offers {
 						<li data-reveal class={ staggerClass(float64(i) * 0.08) }>
-							@offerCard(p, o, i)
+							@offerCard(p, o)
 						</li>
 					}
 				</ul>
+			}
+			if len(d.Tiers) > 0 {
+				<div data-reveal class="olive-texture-dark mt-4 flex flex-wrap items-center gap-x-6 gap-y-3 rounded-3xl bg-olive-700 px-6 py-5 text-limewash">
+					<p class="flex items-center gap-2 font-semibold">
+						<span class="flex size-9 items-center justify-center rounded-full bg-oil-bright text-olive-950">
+							@IconBanknote("size-5")
+						</span>
+						{ p.T(i18n.ProductsTiersTitle) }
+					</p>
+					<ul class="flex flex-wrap gap-2">
+						for _, line := range d.Tiers {
+							<li class="rounded-full bg-limewash/10 px-3.5 py-1.5 text-step-small tabular-nums">{ line }</li>
+						}
+					</ul>
+				</div>
 			}
 			if d.Custom != nil {
 				<div data-reveal class="sheet mt-4 rounded-3xl px-3 pt-8 pb-10 sm:px-8">
 					@litreGauge(p, *d.Custom, false)
 				</div>
+			}
+			if len(d.Jars) > 0 {
+				<h3 data-reveal class="mt-14 text-step-lead">{ p.T(i18n.ProductsJarsTitle) }</h3>
+				<ul class="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+					for i, o := range d.Jars {
+						<li data-reveal class={ staggerClass(float64(i) * 0.08) }>
+							@offerCard(p, o)
+						</li>
+					}
+				</ul>
 			}
 		}
 		if p.WAHref("") != "" {
@@ -129,27 +157,27 @@ templ Offers(p Page, d LandingData) {
 	</section>
 }
 
-// offerCard: the size in large type on an olive panel with a jerrycan filled
-// to scale (against the largest offer), then the price, the price per litre
-// and one order button. A real link to #order (works before JS); landing.js
-// also selects the offer in the form.
-templ offerCard(p Page, o OfferCard, i int) {
-	<article class={ "offer-card flex h-full flex-col rounded-3xl bg-paper p-2.5", templ.KV("offer-out", o.OutOfStock) }>
-		<div class={ "olive-texture-dark relative flex items-end justify-between gap-3 overflow-hidden rounded-[1.25rem] bg-olive-700 px-5 pt-6 pb-5 text-limewash", fillClass(o.Fill) }>
-			<p class="offer-size leading-none whitespace-nowrap tabular-nums">{ offerTitle(o) }</p>
-			<div class="offer-bidon w-16 shrink-0 sm:w-20">
-				@bidon("bidon-" + strconv.Itoa(i))
-			</div>
+const offerPhotoSizes = "(min-width: 80rem) 15rem, (min-width: 40rem) 40vw, 90vw"
+
+// offerCard: the product as it is sold (the mill's labelled bottle, or the
+// jar), its size on the photo, then the price and one order button. A real
+// link to #order (works before JS); landing.js also selects it in the form.
+templ offerCard(p Page, o OfferCard) {
+	<article class={ "offer-card flex h-full flex-col overflow-hidden rounded-3xl bg-paper", templ.KV("offer-out", o.OutOfStock) }>
+		<div class="relative aspect-[4/5] overflow-hidden bg-olive-900">
+			@Picture(o.Image, o.ImageAlt, offerPhotoSizes, false, "offer-photo block h-full w-full", "")
+			<p class="absolute start-3 top-3 rounded-full bg-olive-950/85 px-3.5 py-1 text-step-lead font-semibold text-limewash tabular-nums">{ offerTitle(o) }</p>
+			if o.TierPrice && !o.OutOfStock {
+				<span class="absolute end-3 top-3 rounded-full bg-oil-bright px-3 py-1 text-step-small font-semibold text-olive-950">{ p.T(i18n.ProductsTierBadge) }</span>
+			}
 			if o.OutOfStock {
-				<span class="absolute start-4 top-4 rounded-full bg-limewash px-3 py-1 text-step-small font-semibold text-danger">{ p.T(i18n.ProductsOutOfStock) }</span>
+				<span class="absolute start-3 bottom-3 rounded-full bg-limewash px-3 py-1 text-step-small font-semibold text-danger">{ p.T(i18n.ProductsOutOfStock) }</span>
 			} else if o.LowStock {
-				<span class="absolute start-4 top-4 rounded-full bg-oil-bright px-3 py-1 text-step-small font-semibold text-olive-950">{ p.T(i18n.ProductsLowStock) }</span>
+				<span class="absolute start-3 bottom-3 rounded-full bg-oil-bright px-3 py-1 text-step-small font-semibold text-olive-950">{ p.T(i18n.ProductsLowStock) }</span>
 			}
 		</div>
-		<div class="flex flex-1 flex-col px-2.5 pt-5 pb-2">
-			if o.SizeLabel != "" {
-				<h3 class="text-step-small font-medium text-ink-soft">{ o.Name }</h3>
-			}
+		<div class="flex flex-1 flex-col px-5 pt-4 pb-5">
+			<h3 class="text-step-small font-medium text-ink-soft">{ o.Name }</h3>
 			<p class="mt-1 text-step-lead font-semibold tabular-nums">{ o.Price }</p>
 			if o.PerLiter != "" {
 				<p class="text-step-small text-olive tabular-nums">{ p.T(i18n.ProductsPerLiter, "price", o.PerLiter) }</p>
@@ -163,6 +191,11 @@ templ offerCard(p Page, o OfferCard, i int) {
 						@WhatsAppIcon("text-whatsapp-deep")
 						{ p.T(i18n.ProductsOutOfStockAsk) }
 					}
+				} else if o.Jar {
+					<a href={ templ.SafeURL("?jar=" + o.Slug + "#order") } data-jar={ o.Slug } aria-label={ o.OrderLabel } class={ btn("md"), actPrimary, "w-full" }>
+						{ p.T(i18n.ProductsOrderShort) }
+						@IconArrowForward("")
+					</a>
 				} else {
 					<a href={ templ.SafeURL("?offer=" + o.Slug + "#order") } data-offer={ o.Slug } aria-label={ o.OrderLabel } class={ btn("md"), actPrimary, "w-full" }>
 						{ p.T(i18n.ProductsOrderShort) }
@@ -181,14 +214,6 @@ func offerTitle(o OfferCard) string {
 	return o.Name
 }
 
-// fillClass maps a fill (20 to 100) to its CSS class (CSP: no style attributes).
-func fillClass(fill int) string {
-	if fill <= 0 {
-		return "fill-60"
-	}
-	return "fill-" + strconv.Itoa(min(max(fill/10*10, 20), 100))
-}
-
 // litreGauge: the one live thing. Pick the litres and read the real total
 // from the price per litre; a drawn bidon fills to match. Without JS it is a
 // plain GET form to ?offer=custom&liters=<n>#order, which preselects the
@@ -204,6 +229,7 @@ templ litreGauge(p Page, c CustomCard, afterList bool) {
 		data-currency={ p.T(i18n.CurrencyMad) }
 		data-result={ p.T(i18n.ProductsGaugeResult) }
 		data-per-liter-label={ c.PerLiter }
+		data-tiers={ c.Tiers }
 		class={ templ.KV("mt-14", afterList) }
 	>
 		<input type="hidden" name="offer" value="custom"/>
@@ -298,7 +324,7 @@ templ Benefits(p Page) {
 			</div>
 			<figure data-reveal class="stagger-20 w-48 sm:w-56 xl:w-full">
 				<div class="rounded-img aspect-square">
-					@Picture(StaticImage(p.Asset, "oil-pour"), p.T(i18n.BenefitsImageAlt), "14rem", false, "drift block h-full w-full", "")
+					@Picture(StaticImage(p.Asset, "olives-ripeness"), "", "14rem", false, "drift block h-full w-full", "")
 				</div>
 			</figure>
 		</div>
@@ -357,7 +383,7 @@ templ Reasons(p Page, d LandingData) {
 	<section aria-labelledby="reasons-title" class="olive-texture-dark bg-olive-700 text-limewash">
 		<div class="container-page pt-5 md:pt-10">
 			<div aria-hidden="true" class="rounded-img aspect-[16/9] bg-olive-900 sm:aspect-[3/1]">
-				@Picture(StaticImage(p.Asset, "grove-panorama"), "", "100vw", false, "drift block h-full w-full", "")
+				@Picture(StaticImage(p.Asset, "mill-bottles"), "", "100vw", false, "drift block h-full w-full", "pos-50-40")
 			</div>
 		</div>
 		<div class="container-page section-y">
@@ -365,24 +391,24 @@ templ Reasons(p Page, d LandingData) {
 				@Emphasis(p.T(i18n.ReasonsTitle), "")
 			</h2>
 			<div class="mt-12 grid gap-12 lg:grid-cols-[minmax(0,4fr)_minmax(0,8fr)] lg:gap-20">
-			<div data-reveal>
-				<p class="max-w-[36ch] text-step-body">{ p.T(i18n.ReasonsIntro) }</p>
-				<a href="#order" class={ btn("lg"), actOnField, "mt-10" }>{ p.T(i18n.ReasonsCta) }</a>
-			</div>
-			<ul class="reason-columns">
-				for i, r := range reasons(p, d) {
-					<li data-reveal class={ staggerClass(float64(i) * 0.07), "mb-10" }>
-						<h3 class="text-step-lead">{ r.title }</h3>
-						<p class="mt-2 text-limewash/90">{ r.body }</p>
-						if r.key == "onssa" {
-							<a href="#onssa" class={ textLinkOnDark, "mt-1" }>{ p.T(i18n.ReasonsOnssaLink) }</a>
-						}
-						if r.key == "reviews" && d.Rating != nil {
-							@Stars(d.Rating.Average, "md", d.Rating.StarsLabel, "reason-stars", "mt-2")
-						}
-					</li>
-				}
-			</ul>
+				<div data-reveal>
+					<p class="max-w-[36ch] text-step-body">{ p.T(i18n.ReasonsIntro) }</p>
+					<a href="#order" class={ btn("lg"), actOnField, "mt-10" }>{ p.T(i18n.ReasonsCta) }</a>
+				</div>
+				<ul class="reason-columns">
+					for i, r := range reasons(p, d) {
+						<li data-reveal class={ staggerClass(float64(i) * 0.07), "mb-10" }>
+							<h3 class="text-step-lead">{ r.title }</h3>
+							<p class="mt-2 text-limewash/90">{ r.body }</p>
+							if r.key == "onssa" {
+								<a href="#onssa" class={ textLinkOnDark, "mt-1" }>{ p.T(i18n.ReasonsOnssaLink) }</a>
+							}
+							if r.key == "reviews" && d.Rating != nil {
+								@Stars(d.Rating.Average, "md", d.Rating.StarsLabel, "reason-stars", "mt-2")
+							}
+						</li>
+					}
+				</ul>
 			</div>
 		</div>
 	</section>
@@ -700,10 +726,18 @@ templ Story(p Page, d LandingData) {
 				</div>
 				<p data-reveal class="mt-8 text-step-lead">{ p.SiteName() }</p>
 				<p class="text-ink-soft">{ p.T(i18n.BrandPlace) }</p>
+				<div data-reveal class="stagger-10 mt-8 grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-3">
+					<div class="rounded-img aspect-[3/4] bg-olive-900">
+						@Picture(StaticImage(p.Asset, "coop-logo"), "", "(min-width: 64rem) 14rem, 40vw", false, "block h-full w-full", "pos-50-30")
+					</div>
+					<div class="rounded-img aspect-[3/4] bg-olive-900">
+						@Picture(StaticImage(p.Asset, "brand-cards"), "", "(min-width: 64rem) 21rem, 60vw", false, "block h-full w-full", "")
+					</div>
+				</div>
 			</div>
 			<div class="min-w-0">
 				<figure data-reveal class="stagger-15 rounded-img aspect-[4/3] bg-olive-900">
-					@Picture(StaticImage(p.Asset, "grove-green"), "", "(min-width: 64rem) 40vw, 100vw", false, "drift block h-full w-full", "")
+					@Picture(StaticImage(p.Asset, "mill-team"), "", "(min-width: 64rem) 40vw, 100vw", false, "drift block h-full w-full", "")
 				</figure>
 				<h3 data-reveal class="mt-12 text-step-lead font-normal">{ p.T(i18n.StoryProcessTitle) }</h3>
 				<ol class="mt-5 space-y-4">

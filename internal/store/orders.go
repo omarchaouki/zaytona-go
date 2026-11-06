@@ -111,7 +111,11 @@ func (s *Store) PlaceOrder(ctx context.Context, o NewOrder) (PlaceResult, error)
 				Liters:    l.Liters,
 				UnitPrice: l.UnitPrice,
 				Quantity:  int32(l.Quantity), // #nosec G115 -- 1..999, validated
-				Position:  int16(i),          // #nosec G115 -- one or two lines
+				Position:  int16(i),          // #nosec G115 -- at most 1 + domain.MaxJarLines lines
+			}
+			if l.Grams > 0 {
+				g := int32(l.Grams) // #nosec G115 -- 1..100000 (offers check)
+				item.Grams = &g
 			}
 			if l.OfferID != "" {
 				id, err := uuid.Parse(l.OfferID)

@@ -43,3 +43,6 @@ Thumbs.db
 .taste-skill/
 # Same, in case the folder has no dot prefix
 taste-skill/
+
+# Owner photo originals (encoded copies live in assets/source)
+imgs/

@@ -231,6 +231,100 @@ func TestOrderCustomLitresPricedFromSettings(t *testing.T) {
 	}
 }
 
+// Oil and amlou jars in one order, the custom litres at the volume tier price;
+// jars alone; a hidden jar and a bad quantity refused; the landing shows both.
+func TestOrderWithJarsAndVolumeTiers(t *testing.T) {
+	s := store.New(dbtest.NewDatabase(t, pgURL))
+	ctx := context.Background()
+	if err := seed.Run(ctx, s, seed.Options{}); err != nil {
+		t.Fatal(err)
+	}
+	for _, stmt := range []string{
+		`update settings set value = value || '{"pricePerLiter": "90", "tiers": [{"minLiters": 30, "pricePerLiter": "85"}]}'::jsonb where key = 'pricing'`,
+		`update offers set is_active = true, price_mad = 60 where slug = 'amlou-amandes'`,
+	} {
+		if _, err := s.Pool.Exec(ctx, stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	n := &fakeNotifier{}
+	h, _ := newServerWith(t, s, n)
+	e := &orderEnv{t: t, h: h, s: s, notes: n, tokens: security.NewFormTokens(testConfig(t).DeriveKey(config.KeyFormToken)), ip: "203.0.113.9:1234"}
+
+	o := e.postJSON("fr", e.form(map[string]string{"offer": "custom", "liters": "40", "qty_amlou-amandes": "2"}))
+	if o.Status != "created" {
+		t.Fatalf("oil + jars: %+v", o)
+	}
+	ref := strings.Split(strings.TrimPrefix(o.Redirect, "/fr/order/"), "?")[0]
+	order, _ := e.s.Q.GetOrderByReference(t.Context(), ref)
+	items, _ := e.s.Q.ListOrderItems(t.Context(), order.ID)
+	// 40 L at 85 (tier from 30 L) + 2 jars at 60.
+	if order.Subtotal.String() != "3520" || len(items) != 2 {
+		t.Fatalf("totals %s, %d lines", order.Subtotal, len(items))
+	}
+	jar := items[1]
+	if jar.Quantity != 2 || jar.Grams == nil || *jar.Grams != 500 || !jar.Liters.IsZero() || jar.NameFr != "Amlou aux amandes 500 g" {
+		t.Fatalf("jar line: %+v", jar)
+	}
+
+	e.ip = "203.0.113.10:1234"
+	if o := e.postJSON("fr", e.form(map[string]string{"offer": "", "qty_amlou-amandes": "1", "phone": "0612345670"})); o.Status != "created" {
+		t.Fatalf("jars only: %+v", o)
+	}
+	if o := e.postJSON("fr", e.form(map[string]string{"offer": "", "qty_amlou-amandes": "51", "phone": "0612345671"})); o.Status != "invalid" || o.Errors["jars"] == "" || o.Step != 0 {
+		t.Fatalf("51 jars: %+v", o)
+	}
+	if o := e.postJSON("fr", e.form(map[string]string{"offer": "", "phone": "0612345672"})); o.Status != "invalid" || o.Errors["choice"] == "" {
+		t.Fatalf("nothing chosen: %+v", o)
+	}
+	if _, err := s.Pool.Exec(ctx, `update offers set is_active = false where slug = 'amlou-amandes'`); err != nil {
+		t.Fatal(err)
+	}
+	if o := e.postJSON("fr", e.form(map[string]string{"qty_amlou-amandes": "1", "phone": "0612345673"})); o.Status != "unavailable" {
+		t.Fatalf("hidden jar: %+v", o)
+	}
+	// A jar slug in the oil choice is not an oil offer.
+	if o := e.postJSON("fr", e.form(map[string]string{"offer": "amlou-amandes", "phone": "0612345674"})); o.Status != "unavailable" {
+		t.Fatalf("jar as oil: %+v", o)
+	}
+}
+
+func TestLandingShowsJarsAndTiers(t *testing.T) {
+	s := store.New(dbtest.NewDatabase(t, pgURL))
+	ctx := context.Background()
+	if err := seed.Run(ctx, s, seed.Options{}); err != nil {
+		t.Fatal(err)
+	}
+	h, _ := newServerWith(t, s, &fakeNotifier{})
+	body := get(t, h, "/fr").Body.String()
+	if strings.Contains(body, "Amlou aux amandes") {
+		t.Fatal("hidden, unpriced amlou shown")
+	}
+	for _, stmt := range []string{
+		`update settings set value = value || '{"pricePerLiter": "90", "tiers": [{"minLiters": 30, "pricePerLiter": "85"}]}'::jsonb where key = 'pricing'`,
+		`update offers set is_active = true, price_mad = 60 where slug = 'amlou-amandes'`,
+	} {
+		if _, err := s.Pool.Exec(ctx, stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h, _ = newServerWith(t, s, &fakeNotifier{})
+	body = get(t, h, "/fr").Body.String()
+	for _, want := range []string{"Amlou aux amandes", `data-jar="amlou-amandes"`, "Dès 30 L : 85 MAD le litre", `name="qty_amlou-amandes"`, `data-tiers="[{&#34;min&#34;:30,&#34;price&#34;:&#34;85.00&#34;}]"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("landing missing %q", want)
+		}
+	}
+	// "From" price: the cheapest oil, never the jar.
+	if !strings.Contains(body, "90 MAD") || strings.Contains(body, "À partir de 60") {
+		t.Error("price anchor")
+	}
+	body = get(t, h, "/fr?jar=amlou-amandes").Body.String()
+	if !strings.Contains(body, `name="qty_amlou-amandes" type="number" inputmode="numeric" min="0" max="50" step="1" value="1"`) {
+		t.Error("?jar= does not preselect one jar")
+	}
+}
+
 func TestOrderDuplicateGuardAndUnavailable(t *testing.T) {
 	e := newOrderEnv(t)
 	if o := e.postJSON("fr", e.form(nil)); o.Status != "created" {

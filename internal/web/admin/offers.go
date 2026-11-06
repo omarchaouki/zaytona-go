@@ -76,7 +76,12 @@ func (h *Handlers) offersData(r *http.Request) (view.OffersData, error) {
 	pr := s.Pricing
 	d := view.OffersData{
 		CustomEnabled: pr.CustomEnabled, CustomMin: strconv.Itoa(pr.CustomMinLiters), CustomMax: strconv.Itoa(pr.CustomMaxLiters),
-		PriceIsDemo: pr.IsDemo, UploadMB: h.uploadMB(),
+		PriceIsDemo: pr.IsDemo, UploadMB: h.uploadMB(), Pricing: pr,
+	}
+	for i, t := range pr.SortedTiers() {
+		if i < len(d.Tiers) {
+			d.Tiers[i] = view.TierRow{Min: strconv.Itoa(t.MinLiters), Price: t.PricePerLiter.StringFixed(2)}
+		}
 	}
 	if pr.PricePerLiter.Valid {
 		v := pr.PricePerLiter.Decimal
@@ -87,6 +92,10 @@ func (h *Handlers) offersData(r *http.Request) (view.OffersData, error) {
 		row := view.OfferRow{
 			ID: o.ID.String(), NameAr: o.NameAr, NameFr: o.NameFr, TaglineAr: deref(o.TaglineAr), TaglineFr: deref(o.TaglineFr),
 			Liters: o.Liters, Price: o.PriceMad, AutoPrice: o.AutoPrice, Active: o.IsActive, Demo: o.IsDemo, SortOrder: o.SortOrder,
+			Jar: o.Kind == dbq.OfferKindJar,
+		}
+		if o.Grams != nil {
+			row.Grams = int(*o.Grams)
 		}
 		if o.ImageID != nil && o.ImageWidth != nil && o.ImageHeight != nil {
 			row.Image = view.MediaImage(*o.ImageID, ints32(o.ImageWidths), int(*o.ImageWidth), int(*o.ImageHeight))
@@ -149,6 +158,7 @@ func (h *Handlers) SavePricing(w http.ResponseWriter, r *http.Request, cur *auth
 	if f.ok() && minL > maxL {
 		f.fail("customMax", i18n.AdminOffersRangeError)
 	}
+	tiers := tiersFromForm(f)
 	if !f.ok() {
 		p := h.page(r, cur, i18n.AdminOffersTitle, "offers")
 		h.renderOffers(w, r, cur, http.StatusUnprocessableEntity, formState("pricing", f, p))
@@ -162,14 +172,14 @@ func (h *Handlers) SavePricing(w http.ResponseWriter, r *http.Request, cur *auth
 	before := s.Pricing
 	after := domain.PricingSettings{
 		PricePerLiter: decimal.NullDecimal{Decimal: *price, Valid: true}, CustomEnabled: f.check("customEnabled"),
-		CustomMinLiters: minL, CustomMaxLiters: maxL,
+		CustomMinLiters: minL, CustomMaxLiters: maxL, Tiers: tiers,
 	}
 	var repriced int64
 	err = h.Store.InTx(ctx, func(q *dbq.Queries) error {
 		if err := h.saveSetting(ctx, q, r, cur, "pricing", before, after); err != nil {
 			return err
 		}
-		repriced, err = q.RepriceAutoOffers(ctx, *price)
+		repriced, err = repriceOffers(ctx, q, after)
 		return err
 	})
 	if err != nil {
@@ -204,9 +214,23 @@ func (h *Handlers) SaveOffer(w http.ResponseWriter, r *http.Request, cur *auth.C
 	}
 	p := h.page(r, cur, i18n.AdminOffersTitle, "offers")
 	f := newForm(r)
-	liters := f.decimal("liters", 0, 999, true)
-	if liters != nil && !liters.IsPositive() {
-		f.fail("liters", i18n.AdminCommonNumberInvalid)
+	jar := r.PostFormValue("kind") == "jar"
+	var liters *decimal.Decimal
+	var grams *int32
+	if jar {
+		zero := decimal.Zero
+		liters = &zero
+		if g := f.integer("grams", 1, 100000, 0); g > 0 {
+			g32 := int32(g) // #nosec G115 -- 1..100000 above
+			grams = &g32
+		} else if f.r.PostFormValue("grams") == "" {
+			f.fail("grams", i18n.AdminCommonRequired)
+		}
+	} else {
+		liters = f.decimal("liters", 0, 999, true)
+		if liters != nil && !liters.IsPositive() {
+			f.fail("liters", i18n.AdminCommonNumberInvalid)
+		}
 	}
 	sortOrder := f.integer("sortOrder", 0, 1000, 100)
 	nameAr := f.text("nameAr", 120, true, false)
@@ -214,6 +238,13 @@ func (h *Handlers) SaveOffer(w http.ResponseWriter, r *http.Request, cur *auth.C
 	taglineAr := f.text("taglineAr", 200, false, false)
 	taglineFr := f.text("taglineFr", 200, false, false)
 	auto := r.PostFormValue("mode") != "fixed"
+	if jar && auto {
+		// A jar is never priced by the litre.
+		if r.PostFormValue("price") == "" {
+			f.fail("price", i18n.AdminOffersJarFixedPrice)
+		}
+		auto = false
+	}
 	var price decimal.Decimal
 	s, err := h.settings(ctx)
 	if err != nil {
@@ -224,8 +255,8 @@ func (h *Handlers) SaveOffer(w http.ResponseWriter, r *http.Request, cur *auth.C
 		if !s.Pricing.PricePerLiter.Valid {
 			f.fail("form", i18n.AdminOffersErrorNoPrice)
 		} else if liters != nil {
-			// Same rounding as RepriceAutoOffers.
-			price = liters.Mul(s.Pricing.PricePerLiter.Decimal).Round(2)
+			// Same price as repriceOffers: litres at the tier price.
+			price, _ = s.Pricing.OfferPrice(*liters)
 		}
 	} else if v := f.decimal("price", 0, 1000000, true); v != nil {
 		price = *v
@@ -262,17 +293,23 @@ func (h *Handlers) SaveOffer(w http.ResponseWriter, r *http.Request, cur *auth.C
 	}
 	var saved dbq.Offer
 	if existing == nil {
-		slug := "huile-olive-" + strings.ReplaceAll(liters.String(), ".", "-") + "l-" + strconv.FormatInt(time.Now().UnixNano()/1e6, 36)
+		stamp := strconv.FormatInt(time.Now().UnixNano()/1e6, 36)
+		slug := "huile-olive-" + strings.ReplaceAll(liters.String(), ".", "-") + "l-" + stamp
+		if jar {
+			slug = "pot-" + strconv.Itoa(int(*grams)) + "g-" + stamp
+		}
 		saved, err = h.Store.Q.CreateOffer(ctx, dbq.CreateOfferParams{
 			Slug: slug, NameAr: nameAr, NameFr: nameFr, TaglineAr: opt(taglineAr), TaglineFr: opt(taglineFr),
 			Liters: *liters, AutoPrice: auto, PriceMad: price, ImageID: imageID, StockStatus: dbq.StockStatusInStock,
 			IsActive: f.check("isActive"), SortOrder: int32(sortOrder), //nolint:gosec // G115: 0..1000
+			Kind: kindOf(jar), Grams: grams,
 		})
 	} else {
 		saved, err = h.Store.Q.UpdateOffer(ctx, dbq.UpdateOfferParams{
 			ID: existing.ID, Slug: existing.Slug, NameAr: nameAr, NameFr: nameFr, TaglineAr: opt(taglineAr), TaglineFr: opt(taglineFr),
 			Liters: *liters, AutoPrice: auto, PriceMad: price, ImageID: imageID, StockStatus: existing.StockStatus,
 			IsActive: f.check("isActive"), SortOrder: int32(sortOrder), //nolint:gosec // G115: 0..1000
+			Kind: kindOf(jar), Grams: grams,
 		})
 	}
 	if err != nil {
@@ -284,8 +321,8 @@ func (h *Handlers) SaveOffer(w http.ResponseWriter, r *http.Request, cur *auth.C
 		action = "offer.create"
 	}
 	h.audit(ctx, r, &cur.Admin.ID, action, "offer", saved.ID.String(), map[string]any{
-		"liters": saved.Liters.String(), "price": saved.PriceMad.StringFixed(2), "auto": saved.AutoPrice,
-		"active": saved.IsActive, "photo": imageID != nil,
+		"kind": string(saved.Kind), "liters": saved.Liters.String(), "grams": saved.Grams, "price": saved.PriceMad.StringFixed(2),
+		"auto": saved.AutoPrice, "active": saved.IsActive, "photo": imageID != nil,
 	})
 	if oldImage != nil && (imageID == nil || *imageID != *oldImage) {
 		h.dropMedia(r, oldImage)
@@ -324,4 +361,59 @@ func (h *Handlers) DeleteOffer(w http.ResponseWriter, r *http.Request, cur *auth
 	h.dropMedia(r, o.ImageID)
 	h.Site.Invalidate()
 	http.Redirect(w, r, "/admin/offers?done=removed", http.StatusSeeOther)
+}
+
+func kindOf(jar bool) dbq.OfferKind {
+	if jar {
+		return dbq.OfferKindJar
+	}
+	return dbq.OfferKindOil
+}
+
+// tiersFromForm reads the volume price rows (tierMin1/tierPrice1 ...); a row
+// with both fields empty is unused, a half-filled row is an error.
+func tiersFromForm(f *form) []domain.PriceTier {
+	var tiers []domain.PriceTier
+	for i := 1; i <= domain.MaxPriceTiers; i++ {
+		minName, priceName := "tierMin"+strconv.Itoa(i), "tierPrice"+strconv.Itoa(i)
+		rawMin, rawPrice := strings.TrimSpace(f.r.PostFormValue(minName)), strings.TrimSpace(f.r.PostFormValue(priceName))
+		if rawMin == "" && rawPrice == "" {
+			continue
+		}
+		if rawMin == "" || rawPrice == "" {
+			f.fail(minName, i18n.AdminOffersTierIncomplete)
+			continue
+		}
+		minL := f.integer(minName, 2, 10000, 0)
+		price := f.decimal(priceName, 0, 100000, true)
+		if minL == 0 || price == nil {
+			continue
+		}
+		tiers = append(tiers, domain.PriceTier{MinLiters: minL, PricePerLiter: *price})
+	}
+	if k := domain.ValidateTiers(tiers); k != "" {
+		f.fail("tierMin1", i18n.Key(k))
+	}
+	return tiers
+}
+
+// repriceOffers sets the price of every automatic oil offer to its litres at
+// the price per litre (volume tiers included); it returns how many changed.
+func repriceOffers(ctx context.Context, q *dbq.Queries, pr domain.PricingSettings) (int64, error) {
+	rows, err := q.ListAutoPricedOffers(ctx)
+	if err != nil {
+		return 0, err
+	}
+	var n int64
+	for _, o := range rows {
+		price, ok := pr.OfferPrice(o.Liters)
+		if !ok || price.Equal(o.PriceMad) {
+			continue
+		}
+		if err := q.SetOfferPrice(ctx, dbq.SetOfferPriceParams{ID: o.ID, PriceMad: price}); err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, nil
 }

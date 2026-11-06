@@ -63,6 +63,7 @@ func (h *Handlers) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 	}
 	in := domain.OrderInput{
 		Choice:       r.PostForm.Get("offer"),
+		Jars:         jarQuantities(r.PostForm),
 		CustomLiters: r.PostForm.Get("liters"),
 		Name:         r.PostForm.Get("name"),
 		Phone:        r.PostForm.Get("phone"),
@@ -187,44 +188,95 @@ func (h *Handlers) invalid(l i18n.Locale, ferrs domain.FieldErrors) orderOutcome
 	return out
 }
 
-// priceOrder turns the choice into a priced line. dupOffer scopes the duplicate
-// guard (an offer id, or "" for a custom quantity: any order from that phone).
+// jarQuantities reads the jar fields (qty_<slug>) of a posted order; more
+// fields than the order may hold are cut, Validate then refuses bad values.
+func jarQuantities(form url.Values) map[string]string {
+	out := map[string]string{}
+	for k, v := range form {
+		slug, ok := strings.CutPrefix(k, "qty_")
+		if !ok || len(v) == 0 {
+			continue
+		}
+		if len(out) > 2*domain.MaxJarLines {
+			break
+		}
+		out[slug] = v[0]
+	}
+	return out
+}
+
+// priceOrder turns the choices into priced lines, every price read from the
+// database (never from the client). dupOffer scopes the duplicate guard: the
+// oil offer, else the first jar, or "" for a custom quantity (any order from
+// that phone).
 func (h *Handlers) priceOrder(r *http.Request, d *store.SiteData, v domain.ValidOrder) (lines []domain.OrderLine, dupOffer string, ferr domain.FieldErrors, unavailable bool) {
+	ctx := r.Context()
 	pr := d.Settings.Pricing
-	if v.Choice == domain.CustomChoice {
+	lookup := func(slug string, kind dbq.OfferKind) (dbq.Offer, bool) {
+		offer, err := h.Store.Q.GetOfferBySlug(ctx, slug)
+		if err != nil {
+			if !errors.Is(store.NotFound(err), store.ErrNotFound) {
+				h.Logger.ErrorContext(ctx, "offer lookup", "err", err)
+			}
+			return offer, false
+		}
+		ok := offer.IsActive && offer.StockStatus != dbq.StockStatusOutOfStock && offer.Kind == kind
+		return offer, ok
+	}
+	switch v.Choice {
+	case "":
+	case domain.CustomChoice:
 		if !pr.CustomEnabled || !pr.PricePerLiter.Valid || v.CustomLiters < pr.CustomMinLiters || v.CustomLiters > pr.CustomMaxLiters {
 			return nil, "", domain.FieldErrors{"customLiters": "validation.litersRange"}, false
 		}
 		n := strconv.Itoa(v.CustomLiters)
-		return []domain.OrderLine{{
+		liters := decimal.NewFromInt(int64(v.CustomLiters))
+		ppl, _ := pr.PerLiterFor(liters) // volume tiers apply
+		lines = append(lines, domain.OrderLine{
 			NameAr:    i18n.T(i18n.AR, i18n.OrderFormCustomLine, "liters", n),
 			NameFr:    i18n.T(i18n.FR, i18n.OrderFormCustomLine, "liters", n),
-			Liters:    decimal.NewFromInt(int64(v.CustomLiters)),
-			UnitPrice: domain.LitersPrice(v.CustomLiters, pr.PricePerLiter.Decimal),
+			Liters:    liters,
+			UnitPrice: domain.LitersPrice(v.CustomLiters, ppl),
 			Quantity:  1,
-		}}, "", nil, false
-	}
-	offer, err := h.Store.Q.GetOfferBySlug(r.Context(), v.Choice)
-	if err != nil {
-		if !errors.Is(store.NotFound(err), store.ErrNotFound) {
-			h.Logger.ErrorContext(r.Context(), "offer lookup", "err", err)
+		})
+	default:
+		offer, ok := lookup(v.Choice, dbq.OfferKindOil)
+		if !ok {
+			return nil, "", nil, true
 		}
-		return nil, "", nil, true
+		size := func(loc i18n.Locale) string {
+			return domain.FormatNumber(offer.Liters) + " " + i18n.T(loc, i18n.OrderFormLitersUnit)
+		}
+		lines = append(lines, domain.OrderLine{
+			OfferID:   offer.ID.String(),
+			NameAr:    offer.NameAr + " " + size(i18n.AR),
+			NameFr:    offer.NameFr + " " + size(i18n.FR),
+			Liters:    offer.Liters,
+			UnitPrice: offer.PriceMad,
+			Quantity:  1,
+		})
+		dupOffer = offer.ID.String()
 	}
-	if !offer.IsActive || offer.StockStatus == dbq.StockStatusOutOfStock {
-		return nil, "", nil, true
+	for _, j := range v.Jars {
+		offer, ok := lookup(j.Slug, dbq.OfferKindJar)
+		if !ok || offer.Grams == nil || !offer.PriceMad.IsPositive() {
+			return nil, "", nil, true
+		}
+		g := strconv.Itoa(int(*offer.Grams))
+		lines = append(lines, domain.OrderLine{
+			OfferID:   offer.ID.String(),
+			NameAr:    offer.NameAr + " " + i18n.T(i18n.AR, i18n.ProductsJarSize, "grams", g),
+			NameFr:    offer.NameFr + " " + i18n.T(i18n.FR, i18n.ProductsJarSize, "grams", g),
+			Liters:    decimal.Zero,
+			Grams:     int(*offer.Grams),
+			UnitPrice: offer.PriceMad,
+			Quantity:  j.Quantity,
+		})
+		if dupOffer == "" && v.Choice == "" {
+			dupOffer = offer.ID.String()
+		}
 	}
-	size := func(loc i18n.Locale) string {
-		return domain.FormatNumber(offer.Liters) + " " + i18n.T(loc, i18n.OrderFormLitersUnit)
-	}
-	return []domain.OrderLine{{
-		OfferID:   offer.ID.String(),
-		NameAr:    offer.NameAr + " " + size(i18n.AR),
-		NameFr:    offer.NameFr + " " + size(i18n.FR),
-		Liters:    offer.Liters,
-		UnitPrice: offer.PriceMad,
-		Quantity:  1,
-	}}, offer.ID.String(), nil, false
+	return lines, dupOffer, nil, false
 }
 
 // orderForm builds the form state (blank, or with submitted values).
@@ -253,12 +305,29 @@ func (h *Handlers) orderForm(l i18n.Locale, d *store.SiteData, in domain.OrderIn
 	}
 	unit := i18n.T(l, i18n.OrderFormLitersUnit)
 	var available []string
+	var jarLines []domain.OrderLine
 	for _, o := range d.Offers {
 		name := o.NameFr
 		if l == i18n.AR {
 			name = o.NameAr
 		}
 		out := o.StockStatus == dbq.StockStatusOutOfStock
+		if o.Kind == dbq.OfferKindJar {
+			if o.Grams == nil || !o.PriceMad.IsPositive() {
+				continue // no price yet: not on sale
+			}
+			jar := view.FormJar{
+				Slug: o.Slug, Name: name, SizeLabel: i18n.T(l, i18n.ProductsJarSize, "grams", strconv.Itoa(int(*o.Grams))),
+				Price: domain.FormatMAD(o.PriceMad, loc), PriceRaw: o.PriceMad.StringFixed(2), Unavailable: out,
+				Qty: in.Jars[o.Slug],
+			}
+			if n, err := strconv.Atoi(strings.TrimSpace(jar.Qty)); err == nil && n > 0 && n <= domain.MaxJarQuantity && !out {
+				jarLines = append(jarLines, domain.OrderLine{UnitPrice: o.PriceMad, Quantity: n})
+				f.Lines = append(f.Lines, view.FormLine{Label: strconv.Itoa(n) + " × " + name + " " + jar.SizeLabel, Amount: domain.FormatMAD(o.PriceMad.Mul(decimal.NewFromInt(int64(n))), loc), Quantity: n})
+			}
+			f.Jars = append(f.Jars, jar)
+			continue
+		}
 		f.Offers = append(f.Offers, view.FormOffer{
 			Slug:        o.Slug,
 			SizeLabel:   domain.FormatNumber(o.Liters) + " " + unit,
@@ -280,10 +349,11 @@ func (h *Handlers) orderForm(l i18n.Locale, d *store.SiteData, in domain.OrderIn
 			PerLiterLabel: i18n.T(l, i18n.ProductsPerLiter, "price", ppl),
 			Hint: i18n.T(l, i18n.OrderFormLitersHint, "min", strconv.Itoa(pr.CustomMinLiters),
 				"max", strconv.Itoa(pr.CustomMaxLiters), "price", ppl),
+			Tiers: tiersJSON(pr),
 		}
 	}
-	// A single option is selected by default.
-	if f.Choice == "" && len(available) == 1 && f.Custom == nil {
+	// A single option is selected by default (unless jars can be ordered alone).
+	if f.Choice == "" && len(available) == 1 && f.Custom == nil && len(f.Jars) == 0 {
 		f.Choice = available[0]
 	}
 
@@ -297,11 +367,13 @@ func (h *Handlers) orderForm(l i18n.Locale, d *store.SiteData, in domain.OrderIn
 	}
 	if f.Choice == domain.CustomChoice && f.Custom != nil {
 		if n, err := strconv.Atoi(strings.TrimSpace(f.CustomLiters)); err == nil && n > 0 && n <= 999 {
-			price := domain.LitersPrice(n, pr.PricePerLiter.Decimal)
+			ppl, _ := pr.PerLiterFor(decimal.NewFromInt(int64(n)))
+			price := domain.LitersPrice(n, ppl)
 			lines = append(lines, domain.OrderLine{UnitPrice: price, Quantity: 1})
 			f.Lines = append(f.Lines, view.FormLine{Label: i18n.T(l, i18n.OrderFormCustomLine, "liters", strconv.Itoa(n)), Amount: domain.FormatMAD(price, loc), Quantity: 1})
 		}
 	}
+	lines = append(lines, jarLines...)
 	tot := domain.ComputeTotals(lines, s.Delivery)
 	f.Subtotal = domain.FormatMAD(tot.Subtotal, loc)
 	f.Total = domain.FormatMAD(tot.Total, loc)
@@ -335,7 +407,7 @@ func scriptMessages(l i18n.Locale) string {
 		"totalWithoutDelivery": i18n.OrderFormTotalWithoutDelivery, "deliveryConfirm": i18n.OrderFormDeliveryConfirm,
 		"deliveryFree": i18n.OrderFormDeliveryFree, "stepOf": i18n.OrderFormStepOf,
 		"step1": i18n.OrderFormStep1, "step2": i18n.OrderFormStep2, "step3": i18n.OrderFormStep3,
-		"currency": i18n.CurrencyMad,
+		"currency": i18n.CurrencyMad, "quantityRange": i18n.ValidationQuantityRange,
 	}
 	m := make(map[string]string, len(keys))
 	for k, key := range keys {
@@ -472,4 +544,22 @@ func notifyOrder(o *dbq.Order, lines []domain.OrderLine, l i18n.Locale) notify.O
 		n.Items = append(n.Items, notify.Item{Name: line.NameFr, Quantity: line.Quantity, UnitPrice: line.UnitPrice})
 	}
 	return n
+}
+
+// tiersJSON gives the volume prices to the page scripts (the order form and
+// the litre gauge), lowest threshold first.
+func tiersJSON(pr domain.PricingSettings) string {
+	type tier struct {
+		Min   int    `json:"min"`
+		Price string `json:"price"`
+	}
+	out := []tier{}
+	for _, t := range pr.SortedTiers() {
+		out = append(out, tier{Min: t.MinLiters, Price: t.PricePerLiter.StringFixed(2)})
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
 }

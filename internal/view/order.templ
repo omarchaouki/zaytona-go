@@ -53,10 +53,19 @@ templ OrderForm(p Page, f OrderFormData) {
 							</label>
 						</li>
 					}
+					if len(f.Jars) > 0 && (len(f.Offers) > 0 || f.Custom != nil) {
+						// Jars only: no oil in this order.
+						<li>
+							<label class={ optionClass(false, false) }>
+								<input type="radio" name="offer" value="" class="size-5 shrink-0 accent-olive"/>
+								<span class="min-w-0 flex-1 text-ink-soft">{ p.T(i18n.OrderFormOilNone) }</span>
+							</label>
+						</li>
+					}
 					if f.Custom != nil {
 						<li>
 							<label class={ optionClass(f.Choice == "custom", false) }>
-								<input type="radio" name="offer" value="custom" checked?={ f.Choice == "custom" } data-price-per-liter={ f.Custom.PerLiterRaw } data-min={ strconv.Itoa(f.Custom.Min) } data-max={ strconv.Itoa(f.Custom.Max) } class="size-5 shrink-0 accent-olive"/>
+								<input type="radio" name="offer" value="custom" checked?={ f.Choice == "custom" } data-price-per-liter={ f.Custom.PerLiterRaw } data-tiers={ f.Custom.Tiers } data-min={ strconv.Itoa(f.Custom.Min) } data-max={ strconv.Itoa(f.Custom.Max) } class="size-5 shrink-0 accent-olive"/>
 								<span class="min-w-0 flex-1 font-semibold">{ p.T(i18n.OrderFormCustomOption) }</span>
 								<span class="shrink-0 text-sm text-ink-soft tabular-nums">{ f.Custom.PerLiterLabel }</span>
 							</label>
@@ -75,6 +84,9 @@ templ OrderForm(p Page, f OrderFormData) {
 				</ul>
 				<p id="choice-error" data-error-for="choice" role="alert" hidden?={ !f.HasError("choice") } class="mt-2 text-sm font-medium text-danger">{ f.Errors["choice"] }</p>
 			</fieldset>
+			if len(f.Jars) > 0 {
+				@jarChoices(p, f)
+			}
 			<p class="mt-4 flex items-baseline justify-between gap-3 rounded-2xl bg-sand/70 px-4 py-3" aria-live="polite">
 				<span class="text-sm text-ink-soft" data-total-label>{ f.TotalLabel }</span>
 				<span class="text-step-lead tabular-nums" data-total>{ f.Total }</span>
@@ -193,6 +205,35 @@ templ OrderForm(p Page, f OrderFormData) {
 			{ p.T(i18n.OrderFormPayOnDelivery) }
 		</p>
 	</form>
+}
+
+// jarChoices: jar products with a quantity each (0 = none). The number field
+// works on its own; with JS the - and + buttons step it.
+templ jarChoices(p Page, f OrderFormData) {
+	<fieldset id="order-jars" class="mt-g3" aria-describedby={ errID(f, "jars") }>
+		<legend class="text-step-lead">{ p.T(i18n.OrderFormJarsLegend) }</legend>
+		<p class="mt-1 text-sm text-ink-soft">{ p.T(i18n.OrderFormJarsHint) }</p>
+		<ul class="mt-3 grid gap-2">
+			for _, j := range f.Jars {
+				<li class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border-2 border-sand bg-white px-3 py-3">
+					<label for={ "qty-" + j.Slug } class="min-w-0 flex-1">
+						<span class="block font-semibold">{ j.Name }</span>
+						<span class="block text-sm text-ink-soft tabular-nums">{ j.SizeLabel } · { j.Price }</span>
+					</label>
+					if j.Unavailable {
+						<span class="text-sm font-medium text-danger">{ p.T(i18n.OrderFormUnavailable) }</span>
+					} else {
+						<div class="flex items-center gap-1.5" dir="ltr">
+							<button type="button" data-qty-step="-1" data-for={ "qty-" + j.Slug } aria-label={ p.T(i18n.OrderFormLess, "name", j.Name) } class="js-only tap items-center justify-center rounded-full bg-sand text-xl font-bold hover:bg-sand-deep/60">−</button>
+							<input id={ "qty-" + j.Slug } name={ j.QtyName() } type="number" inputmode="numeric" min="0" max="50" step="1" value={ j.Qty } placeholder="0" data-jar-qty data-slug={ j.Slug } data-price={ j.PriceRaw } data-label={ j.Name + " " + j.SizeLabel } class="field-input w-[7.5rem] text-center text-lg font-semibold tabular-nums"/>
+							<button type="button" data-qty-step="1" data-for={ "qty-" + j.Slug } aria-label={ p.T(i18n.OrderFormMore, "name", j.Name) } class="js-only tap items-center justify-center rounded-full bg-sand text-xl font-bold hover:bg-sand-deep/60">+</button>
+						</div>
+					}
+				</li>
+			}
+		</ul>
+		<p id="jars-error" data-error-for="jars" role="alert" hidden?={ !f.HasError("jars") } class="mt-2 text-sm font-medium text-danger">{ f.Errors["jars"] }</p>
+	</fieldset>
 }
 
 var orderSteps = []i18n.Key{i18n.OrderFormStep1, i18n.OrderFormStep2, i18n.OrderFormStep3}

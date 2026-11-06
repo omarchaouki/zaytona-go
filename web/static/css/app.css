@@ -443,6 +443,17 @@
 }
 
 
+/* ------------------------------------------- admin: offer form by kind
+ * Only the fields of the chosen kind show (oil: litres and price mode; jar:
+ * weight). Without :has support both show and the server sorts it out.
+ */
+@layer components {
+  .offer-form:has(input[name="kind"][value="jar"]:checked) [data-for-oil],
+  .offer-form:has(input[name="kind"][value="oil"]:checked) [data-for-jar] {
+    display: none;
+  }
+}
+
 /* ------------------------------------------------------------ order form
  * With JS only the current step shows (the "js" class is set before the first
  * paint, so there is no flash); without JS every step shows and the form posts.
@@ -454,6 +465,13 @@
   }
   .js li:not(:has(input[value="custom"]:checked)) > [data-custom-liters] {
     display: none;
+  }
+  /* Controls that need the script (the jar - and + buttons). */
+  .js-only {
+    display: none;
+  }
+  .js .js-only {
+    display: inline-flex;
   }
 }
 
@@ -763,22 +781,7 @@
     clip-path: polygon(0 0, 100% 0, 100% 100%, 98.75% calc(100% - 8px), 97.5% 100%, 96.25% calc(100% - 8px), 95% 100%, 93.75% calc(100% - 8px), 92.5% 100%, 91.25% calc(100% - 8px), 90% 100%, 88.75% calc(100% - 8px), 87.5% 100%, 86.25% calc(100% - 8px), 85% 100%, 83.75% calc(100% - 8px), 82.5% 100%, 81.25% calc(100% - 8px), 80% 100%, 78.75% calc(100% - 8px), 77.5% 100%, 76.25% calc(100% - 8px), 75% 100%, 73.75% calc(100% - 8px), 72.5% 100%, 71.25% calc(100% - 8px), 70% 100%, 68.75% calc(100% - 8px), 67.5% 100%, 66.25% calc(100% - 8px), 65% 100%, 63.75% calc(100% - 8px), 62.5% 100%, 61.25% calc(100% - 8px), 60% 100%, 58.75% calc(100% - 8px), 57.5% 100%, 56.25% calc(100% - 8px), 55% 100%, 53.75% calc(100% - 8px), 52.5% 100%, 51.25% calc(100% - 8px), 50% 100%, 48.75% calc(100% - 8px), 47.5% 100%, 46.25% calc(100% - 8px), 45% 100%, 43.75% calc(100% - 8px), 42.5% 100%, 41.25% calc(100% - 8px), 40% 100%, 38.75% calc(100% - 8px), 37.5% 100%, 36.25% calc(100% - 8px), 35% 100%, 33.75% calc(100% - 8px), 32.5% 100%, 31.25% calc(100% - 8px), 30% 100%, 28.75% calc(100% - 8px), 27.5% 100%, 26.25% calc(100% - 8px), 25% 100%, 23.75% calc(100% - 8px), 22.5% 100%, 21.25% calc(100% - 8px), 20% 100%, 18.75% calc(100% - 8px), 17.5% 100%, 16.25% calc(100% - 8px), 15% 100%, 13.75% calc(100% - 8px), 12.5% 100%, 11.25% calc(100% - 8px), 10% 100%, 8.75% calc(100% - 8px), 7.5% 100%, 6.25% calc(100% - 8px), 5% 100%, 3.75% calc(100% - 8px), 2.5% 100%, 1.25% calc(100% - 8px), 0% 100%);
   }
 
-  /* Offer cards: each jerrycan is filled to its offer's size (fill-NN sets
-     --fill); the card lifts a little on hover. */
-  .fill-20 { --fill: 0.2; }
-  .fill-30 { --fill: 0.3; }
-  .fill-40 { --fill: 0.4; }
-  .fill-50 { --fill: 0.5; }
-  .fill-60 { --fill: 0.6; }
-  .fill-70 { --fill: 0.7; }
-  .fill-80 { --fill: 0.8; }
-  .fill-90 { --fill: 0.9; }
-  .fill-100 { --fill: 1; }
-  .offer-size {
-    font-family: var(--font-display);
-    font-size: calc(clamp(2.25rem, 1.6rem + 1.4vw, 3rem) * var(--heading-scale));
-    letter-spacing: var(--heading-tracking);
-  }
+  /* Offer cards lift a little on hover and their photo zooms. */
   .offer-card {
     transition:
       transform 300ms var(--ease-out-soft),
@@ -788,15 +791,15 @@
     transform: translateY(-4px);
     box-shadow: var(--shadow-float); /* taste-skill-ignore: lifted only while pointed at */
   }
-  .offer-card .offer-bidon {
-    transition: transform 400ms var(--ease-out-soft);
+  .offer-card .offer-photo img {
+    transition: transform 600ms var(--ease-out-soft);
   }
-  .offer-card:hover .offer-bidon {
-    transform: rotate(-6deg) scale(1.05);
+  .offer-card:hover .offer-photo img {
+    transform: scale(1.05);
   }
-  .offer-out .offer-bidon,
-  .offer-out p {
-    opacity: 0.55;
+  .offer-out .offer-photo {
+    opacity: 0.6;
+    filter: grayscale(0.4);
   }
 
   /* The mill's name, large and quiet behind the last line of the footer;
@@ -871,6 +874,35 @@
   /* Buttons: flat fill, square, a small press. */
   .btn-press:active {
     transform: translateY(1px);
+  }
+}
+
+/* ------------------------------------------------------- page changes
+ * In-place navigation (lib/nav.js): only the content area (#main) fades from
+ * one page to the next; the header, sidebar and bars stay still, as in an app.
+ */
+#main {
+  view-transition-name: page;
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+::view-transition-old(page) {
+  animation: 120ms ease-out both page-out;
+}
+::view-transition-new(page) {
+  animation: 200ms var(--ease-out-soft) both page-in;
+}
+@keyframes page-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 6px, 0);
   }
 }
 

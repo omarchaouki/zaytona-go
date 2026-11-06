@@ -41,7 +41,11 @@ func Open(ctx context.Context, url string, maxConns int32) (*pgxpool.Pool, error
 		cfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeCacheStatement
 	}
 	cfg.MaxConns = maxConns
-	cfg.MaxConnIdleTime = 5 * time.Minute
+	// Keep two connections open and reuse idle ones for a while: with a
+	// remote database (Supabase) a new connection costs a TLS handshake.
+	cfg.MinConns = min(2, maxConns)
+	cfg.MaxConnIdleTime = 30 * time.Minute
+	cfg.HealthCheckPeriod = time.Minute
 	cfg.ConnConfig.RuntimeParams["application_name"] = "zaytona"
 	cfg.AfterConnect = afterConnect("5000")
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)

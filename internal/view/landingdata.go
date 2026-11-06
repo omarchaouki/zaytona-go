@@ -10,7 +10,9 @@ type LandingData struct {
 	// Rating from approved, non-example reviews; nil until there is one.
 	Rating *Rating
 
-	Offers []OfferCard
+	Offers []OfferCard // oil by the litre
+	Jars   []OfferCard // jars (amlou...), shown after the oil
+	Tiers  []string    // volume prices, "From 30 L: 85 MAD a litre"
 	Custom *CustomCard
 
 	ONSSA      *Certificate
@@ -53,7 +55,8 @@ type OfferCard struct {
 	ImageAlt                       string
 	OutOfStock, LowStock           bool
 	OrderLabel                     string // accessible name of the order link
-	Fill                           int    // jerrycan fill against the largest offer: 20 to 100, steps of 10
+	Jar                            bool   // sold by the jar (SizeLabel in grams)
+	TierPrice                      bool   // automatic price at a volume tier
 }
 
 // CustomCard is the "other quantity" offer and the litre gauge: PerLiterRaw
@@ -62,6 +65,7 @@ type CustomCard struct {
 	PerLiter, PerLiterRaw string
 	Min, Max              int
 	Body, Hint            string
+	Tiers                 string // volume prices for the gauge script (JSON)
 }
 
 // Certificate is a public certificate.

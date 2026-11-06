@@ -15,8 +15,9 @@ type OrderFormData struct {
 	// Step shown first (0 offers, 1 details, 2 review).
 	Step int
 
-	Offers []FormOffer
+	Offers []FormOffer // oil, sold by the litre
 	Custom *FormCustom
+	Jars   []FormJar // jars (amlou...), any quantity alongside the oil
 	// Delivery rule for the live total, as plain numbers for the script.
 	DeliveryMode, DeliveryFee, DeliveryFreeAbove string
 	// Totals as rendered by the server for the current choice.
@@ -43,7 +44,20 @@ type FormCustom struct {
 	PerLiter            string // formatted
 	PerLiterRaw         string
 	Hint, PerLiterLabel string
+	Tiers               string // volume prices for the script: [{"min":30,"price":"85.00"}]
 }
+
+// FormJar is a jar product with the quantity chosen ("" for none).
+type FormJar struct {
+	Slug, Name, SizeLabel string
+	Price                 string // formatted, one jar
+	PriceRaw              string
+	Unavailable           bool
+	Qty                   string
+}
+
+// QtyName is the form field of a jar's quantity.
+func (j FormJar) QtyName() string { return "qty_" + j.Slug }
 
 // FormLine is a line of the review step and the confirmation summary.
 type FormLine struct {

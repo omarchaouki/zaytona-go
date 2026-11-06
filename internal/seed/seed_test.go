@@ -8,6 +8,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/omarchaouki/zaytona-go/internal/auth"
+	"github.com/omarchaouki/zaytona-go/internal/db/dbq"
 	"github.com/omarchaouki/zaytona-go/internal/db/dbtest"
 	"github.com/omarchaouki/zaytona-go/internal/domain"
 	"github.com/omarchaouki/zaytona-go/internal/seed"
@@ -36,10 +37,17 @@ func TestSeedIsIdempotentAndFlagsDemoRows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(offers) != 3 {
+	if len(offers) != 4 {
 		t.Fatalf("%d offers", len(offers))
 	}
 	for _, o := range offers {
+		if o.Kind == dbq.OfferKindJar {
+			// The amlou jar waits hidden, without a price, for the owner.
+			if o.IsActive || o.AutoPrice || !o.PriceMad.IsZero() || o.Grams == nil {
+				t.Errorf("jar %s: active=%v auto=%v price=%s", o.Slug, o.IsActive, o.AutoPrice, o.PriceMad)
+			}
+			continue
+		}
 		if !o.IsDemo || !o.AutoPrice {
 			t.Errorf("offer %s not flagged demo/auto", o.Slug)
 		}

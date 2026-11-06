@@ -154,11 +154,38 @@ func Run(ctx context.Context, s *store.Store, opts Options) error {
 				IsActive:    true,
 				SortOrder:   int32(i), // #nosec G115 -- a handful of seed rows
 				IsDemo:      true,
+				Kind:        dbq.OfferKindOil,
 			})
 			if err != nil {
 				return fmt.Errorf("offer %s: %w", o.Slug, err)
 			}
 			log("offer " + o.Slug + ": demo row created")
+		}
+
+		// Amlou with almonds: a jar product, created hidden and without a price
+		// (prices are never invented): the owner sets the weight, the price and
+		// a photo of the real jar in Admin > Offers, then makes it visible.
+		if _, err := q.GetOfferBySlug(ctx, amlouSlug); errors.Is(store.NotFound(err), store.ErrNotFound) {
+			grams := int32(500)
+			if _, err := q.CreateOffer(ctx, dbq.CreateOfferParams{
+				Slug:        amlouSlug,
+				NameAr:      "أملو باللوز",
+				NameFr:      "Amlou aux amandes",
+				Liters:      decimal.Zero,
+				AutoPrice:   false,
+				PriceMad:    decimal.Zero,
+				StockStatus: dbq.StockStatusInStock,
+				IsActive:    false,
+				SortOrder:   100,
+				IsDemo:      true,
+				Kind:        dbq.OfferKindJar,
+				Grams:       &grams,
+			}); err != nil {
+				return fmt.Errorf("offer %s: %w", amlouSlug, err)
+			}
+			log("offer " + amlouSlug + ": hidden jar created (set its price, then show it)")
+		} else if err != nil {
+			return err
 		}
 
 		// Example reviews, once.
@@ -248,6 +275,9 @@ func Run(ctx context.Context, s *store.Store, opts Options) error {
 		return nil
 	})
 }
+
+// amlouSlug is the seeded amlou jar (its photo default is images/amlou-jars).
+const amlouSlug = "amlou-amandes"
 
 func ptr(s string) *string {
 	if s == "" {

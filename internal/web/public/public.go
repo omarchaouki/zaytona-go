@@ -106,6 +106,9 @@ func (h *Handlers) Landing(w http.ResponseWriter, r *http.Request) {
 			in.CustomLiters = liters
 		}
 		f = h.orderForm(locale, d, in)
+	} else if jar := r.URL.Query().Get("jar"); jar != "" && len(jar) <= 64 {
+		// "Order" on a jar card without JS: one jar of it in the form.
+		f = h.orderForm(locale, d, domain.OrderInput{Jars: map[string]string{jar: "1"}})
 	}
 	render(w, r, http.StatusOK, p.Nonce, view.Landing(p, data, f))
 }

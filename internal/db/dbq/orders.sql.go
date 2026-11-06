@@ -135,8 +135,8 @@ func (q *Queries) CreateOrderEvent(ctx context.Context, arg CreateOrderEventPara
 }
 
 const createOrderItem = `-- name: CreateOrderItem :exec
-insert into order_items (order_id, offer_id, name_ar, name_fr, liters, unit_price, quantity, position)
-values ($1, $2, $3, $4, $5, $6, $7, $8)
+insert into order_items (order_id, offer_id, name_ar, name_fr, liters, unit_price, quantity, position, grams)
+values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 `
 
 type CreateOrderItemParams struct {
@@ -148,6 +148,7 @@ type CreateOrderItemParams struct {
 	UnitPrice decimal.Decimal
 	Quantity  int32
 	Position  int16
+	Grams     *int32
 }
 
 func (q *Queries) CreateOrderItem(ctx context.Context, arg CreateOrderItemParams) error {
@@ -160,6 +161,7 @@ func (q *Queries) CreateOrderItem(ctx context.Context, arg CreateOrderItemParams
 		arg.UnitPrice,
 		arg.Quantity,
 		arg.Position,
+		arg.Grams,
 	)
 	return err
 }
@@ -586,7 +588,7 @@ func (q *Queries) ListDistinctCities(ctx context.Context) ([]ListDistinctCitiesR
 }
 
 const listItemsForOrders = `-- name: ListItemsForOrders :many
-select id, order_id, offer_id, name_ar, name_fr, liters, unit_price, quantity, position from order_items where order_id = any($1::uuid[]) order by order_id, position
+select id, order_id, offer_id, name_ar, name_fr, liters, unit_price, quantity, position, grams from order_items where order_id = any($1::uuid[]) order by order_id, position
 `
 
 func (q *Queries) ListItemsForOrders(ctx context.Context, orderIds []uuid.UUID) ([]OrderItem, error) {
@@ -608,6 +610,7 @@ func (q *Queries) ListItemsForOrders(ctx context.Context, orderIds []uuid.UUID) 
 			&i.UnitPrice,
 			&i.Quantity,
 			&i.Position,
+			&i.Grams,
 		); err != nil {
 			return nil, err
 		}
@@ -697,7 +700,7 @@ func (q *Queries) ListOrderEventsWithAdmin(ctx context.Context, orderID uuid.UUI
 }
 
 const listOrderItems = `-- name: ListOrderItems :many
-select id, order_id, offer_id, name_ar, name_fr, liters, unit_price, quantity, position from order_items where order_id = $1 order by position
+select id, order_id, offer_id, name_ar, name_fr, liters, unit_price, quantity, position, grams from order_items where order_id = $1 order by position
 `
 
 func (q *Queries) ListOrderItems(ctx context.Context, orderID uuid.UUID) ([]OrderItem, error) {
@@ -719,6 +722,7 @@ func (q *Queries) ListOrderItems(ctx context.Context, orderID uuid.UUID) ([]Orde
 			&i.UnitPrice,
 			&i.Quantity,
 			&i.Position,
+			&i.Grams,
 		); err != nil {
 			return nil, err
 		}

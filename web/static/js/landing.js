@@ -139,10 +139,12 @@ function initWhatsAppTooltip() {
 // form and scroll to it.
 function initOfferLinks() {
   document.addEventListener('click', (event) => {
-    const link = event.target instanceof Element ? event.target.closest('[data-offer]') : null
+    const link = event.target instanceof Element ? event.target.closest('[data-offer], [data-jar]') : null
     if (!link || !document.querySelector('[data-order-form]')) return
     event.preventDefault()
-    window.dispatchEvent(new CustomEvent('offer:select', { detail: link.dataset.offer }))
+    // An oil offer is chosen; a jar is added (one, or the count already typed).
+    if (link.dataset.jar) window.dispatchEvent(new CustomEvent('jar:add', { detail: link.dataset.jar }))
+    else window.dispatchEvent(new CustomEvent('offer:select', { detail: link.dataset.offer }))
     const order = document.getElementById('order')
     order?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
     history.replaceState(null, '', '#order')

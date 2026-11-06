@@ -42,7 +42,7 @@ func TestAssetBudgets(t *testing.T) {
 
 // Hero (LCP) image: at most 120 KB at 960 px AVIF.
 func TestHeroImageBudget(t *testing.T) {
-	st, err := os.Stat(filepath.Join("static", "images", "olives-golden-hour-960.avif"))
+	st, err := os.Stat(filepath.Join("static", "images", "oil-bottles-960.avif"))
 	if err != nil {
 		t.Fatal(err)
 	}

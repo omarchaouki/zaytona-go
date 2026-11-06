@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -16,10 +18,20 @@ import (
 // CustomChoice is the offer value for "other quantity" (litres typed by the customer).
 const CustomChoice = "custom"
 
+// MaxJarQuantity is the most jars of one product in an order, and MaxJarLines
+// the most different jar products.
+const (
+	MaxJarQuantity = 50
+	MaxJarLines    = 10
+)
+
+var slugRE = regexp.MustCompile(`^[a-z0-9-]{1,64}$`)
+
 // OrderInput is what the customer submits. Prices never come from the client.
 type OrderInput struct {
-	Choice       string // offer slug, or CustomChoice
-	CustomLiters string // digits, only with CustomChoice
+	Choice       string            // oil offer slug, CustomChoice, or "" (jars only)
+	Jars         map[string]string // jar offer slug -> quantity typed ("" or "0" = none)
+	CustomLiters string            // digits, only with CustomChoice
 	Name         string
 	Phone        string // any common format; normalized to E.164 by Validate
 	City         string
@@ -27,10 +39,17 @@ type OrderInput struct {
 	Note         string
 }
 
+// JarChoice is a jar product and how many.
+type JarChoice struct {
+	Slug     string
+	Quantity int
+}
+
 // ValidOrder is a validated, normalized input.
 type ValidOrder struct {
-	Choice       string
-	CustomLiters int // 0 unless Choice == CustomChoice
+	Choice       string      // "" when the order holds jars only
+	Jars         []JarChoice // sorted by slug
+	CustomLiters int         // 0 unless Choice == CustomChoice
 	Name         string
 	PhoneE164    string
 	City         string
@@ -77,10 +96,31 @@ func (in OrderInput) Validate() (ValidOrder, FieldErrors) {
 	}
 	runes := utf8.RuneCountInString
 
+	for slug, raw := range in.Jars {
+		raw = strings.TrimSpace(raw)
+		if raw == "" || raw == "0" {
+			continue
+		}
+		n, err := strconv.Atoi(raw)
+		switch {
+		case !slugRE.MatchString(slug):
+			errs["jars"] = "validation.invalid"
+		case err != nil || n < 1 || n > MaxJarQuantity:
+			errs["jars"] = "validation.quantityRange"
+		default:
+			v.Jars = append(v.Jars, JarChoice{Slug: slug, Quantity: n})
+		}
+	}
+	if len(v.Jars) > MaxJarLines {
+		errs["jars"] = "validation.invalid"
+	}
+	sort.Slice(v.Jars, func(i, j int) bool { return v.Jars[i].Slug < v.Jars[j].Slug })
+
 	v.Choice = strings.TrimSpace(in.Choice)
 	switch {
-	case v.Choice == "":
+	case v.Choice == "" && len(v.Jars) == 0 && errs["jars"] == "":
 		errs["choice"] = "validation.itemsRequired"
+	case v.Choice == "":
 	case v.Choice == CustomChoice:
 		n, err := strconv.Atoi(strings.TrimSpace(in.CustomLiters))
 		switch {
@@ -133,7 +173,7 @@ func (in OrderInput) Validate() (ValidOrder, FieldErrors) {
 // FieldStep is the form step (0, 1, 2) that holds a field, for routing errors.
 func FieldStep(field string) int {
 	switch field {
-	case "choice", "customLiters":
+	case "choice", "customLiters", "jars":
 		return 0
 	case "name", "phone", "city", "address", "note":
 		return 1
@@ -146,7 +186,8 @@ type OrderLine struct {
 	OfferID   string // empty for "other quantity"
 	NameAr    string
 	NameFr    string
-	Liters    decimal.Decimal // per unit
+	Liters    decimal.Decimal // per unit (0 for a jar)
+	Grams     int             // per unit, jars only
 	UnitPrice decimal.Decimal
 	Quantity  int
 }

@@ -8,14 +8,14 @@ import (
 
 // AdminReviewsData fills Admin > Reviews.
 type AdminReviewsData struct {
-	Status   string // pending, approved, rejected, all
-	Q        string
-	Counts   map[string]int64
-	Rows     []AdminReviewRow
-	Page     int
-	NextURL  string
-	PrevURL  string
-	Return   string // this list, to come back to after an action
+	Status  string // pending, approved, rejected, all
+	Q       string
+	Counts  map[string]int64
+	Rows    []AdminReviewRow
+	Page    int
+	NextURL string
+	PrevURL string
+	Return  string // this list, to come back to after an action
 }
 
 // AdminReviewRow is one review in the moderation list.

@@ -1,23 +1,33 @@
 package view
 
 import (
+	"strconv"
+
 	"github.com/shopspring/decimal"
 
+	"github.com/omarchaouki/zaytona-go/internal/domain"
 	"github.com/omarchaouki/zaytona-go/internal/i18n"
 )
 
 // OffersData fills Admin > Offers and prices.
 type OffersData struct {
-	PricePerLiter  string // "" when not set
-	PerLiter       *decimal.Decimal
-	CustomEnabled  bool
-	CustomMin      string
-	CustomMax      string
-	PriceIsDemo    bool
-	Offers         []OfferRow
-	Form           *FormState
-	UploadMB       string
-	OpenNew        bool
+	PricePerLiter string // "" when not set
+	PerLiter      *decimal.Decimal
+	CustomEnabled bool
+	CustomMin     string
+	CustomMax     string
+	PriceIsDemo   bool
+	Offers        []OfferRow
+	Form          *FormState
+	UploadMB      string
+	OpenNew       bool
+	Pricing       domain.PricingSettings
+	Tiers         [domain.MaxPriceTiers]TierRow // volume prices, empty rows unused
+}
+
+// TierRow is one volume price row of the pricing form.
+type TierRow struct {
+	Min, Price string
 }
 
 // OfferRow is one offer in the editor.
@@ -29,9 +39,41 @@ type OfferRow struct {
 	SortOrder                                int32
 	Image                                    Image
 	HasImage                                 bool
+	Jar                                      bool // sold by the jar (grams), else oil by the litre
+	Grams                                    int
 }
 
 func (o OfferRow) litersText() string { return o.Liters.String() }
+
+// sizeText is "30 L" for oil, "500 g" for a jar.
+func (p AdminPage) sizeText(o OfferRow) string {
+	if o.Jar {
+		return p.T(i18n.ProductsJarSize, "grams", strconv.Itoa(o.Grams))
+	}
+	return o.litersText() + " " + p.T(i18n.OrderFormLitersUnit)
+}
+
+// litersField is empty for a jar (its litres are 0).
+func litersField(o OfferRow) string {
+	if o.Jar {
+		return ""
+	}
+	return o.litersText()
+}
+
+func gramsText(o OfferRow) string {
+	if o.Grams == 0 {
+		return ""
+	}
+	return strconv.Itoa(o.Grams)
+}
+
+func kindValue(o OfferRow) string {
+	if o.Jar {
+		return "jar"
+	}
+	return "oil"
+}
 
 func (p AdminPage) offerName(o OfferRow) string {
 	if p.Locale == i18n.AR {
@@ -44,8 +86,9 @@ func (d OffersData) autoPreview(p AdminPage, liters decimal.Decimal) string {
 	if d.PerLiter == nil {
 		return p.T(i18n.AdminOffersErrorNoPrice)
 	}
-	total := liters.Mul(*d.PerLiter).Round(2)
-	return p.T(i18n.AdminOffersAutoPreview, "liters", liters.String(), "perLiter", p.mad(*d.PerLiter), "total", p.mad(total))
+	ppl, _ := d.Pricing.PerLiterFor(liters)
+	total, _ := d.Pricing.OfferPrice(liters)
+	return p.T(i18n.AdminOffersAutoPreview, "liters", liters.String(), "perLiter", p.mad(ppl), "total", p.mad(total))
 }
 
 templ AdminOffers(p AdminPage, d OffersData) {
@@ -100,6 +143,16 @@ templ pricingCard(p AdminPage, d OffersData, s *FormState) {
 			@Input("pricing", Field{Name: "customMin", Label: p.T(i18n.AdminOffersCustomMin), Dir: "ltr", Mode: "numeric", Required: true, Max: 4}, d.CustomMin, s)
 			@Input("pricing", Field{Name: "customMax", Label: p.T(i18n.AdminOffersCustomMax), Dir: "ltr", Mode: "numeric", Required: true, Max: 4}, d.CustomMax, s)
 		</fieldset>
+		<fieldset disabled?={ !p.Owner } class="mt-g3">
+			<legend class="font-bold text-olive">{ p.T(i18n.AdminOffersTiersTitle) }</legend>
+			<p class="mt-1 text-sm text-ink-soft">{ p.T(i18n.AdminOffersTiersHint) }</p>
+			<div class="mt-g2 grid gap-x-g2 gap-y-1 sm:grid-cols-2">
+				for i, t := range d.Tiers {
+					@Input("pricing", Field{Name: "tierMin" + strconv.Itoa(i+1), Label: p.T(i18n.AdminOffersTierMin), Dir: "ltr", Mode: "numeric", Max: 6}, t.Min, s)
+					@Input("pricing", Field{Name: "tierPrice" + strconv.Itoa(i+1), Label: p.T(i18n.AdminOffersTierPrice), Dir: "ltr", Mode: "decimal", Max: 12}, t.Price, s)
+				}
+			</div>
+		</fieldset>
 		<div class="mt-g2 space-y-2">
 			@SaveRow(p, p.T(i18n.AdminOffersSave), s.E("form"), "")
 		</div>
@@ -112,17 +165,18 @@ templ adminOfferCard(p AdminPage, d OffersData, o OfferRow) {
 			if o.HasImage {
 				@Picture(o.Image, "", "64px", false, "size-16 shrink-0 overflow-hidden rounded-card", "size-16 object-cover")
 			} else {
-				<span class="flex size-16 shrink-0 flex-col items-center justify-center rounded-card bg-olive-950 text-oil-bright">
-					<span class="font-display text-xl leading-none font-bold tabular-nums">{ o.litersText() }</span>
-					<span class="text-xs">{ p.T(i18n.OrderFormLitersUnit) }</span>
+				<span class="flex size-16 shrink-0 flex-col items-center justify-center rounded-card bg-olive-950 px-1 text-center text-oil-bright">
+					<span class="font-display text-sm leading-tight font-bold tabular-nums">{ p.sizeText(o) }</span>
 				</span>
 			}
 			<div class="min-w-0 flex-1">
-				<p class="font-bold text-olive">{ p.offerName(o) }</p>
+				<p class="font-bold text-olive">{ p.offerName(o) } <span class="font-normal text-ink-soft tabular-nums">· { p.sizeText(o) }</span></p>
 				<p class="mt-0.5 text-lg font-bold tabular-nums">{ p.mad(o.Price) }</p>
 				<div class="mt-1 flex flex-wrap gap-1.5 text-xs font-medium">
 					<span class="rounded-full bg-olive/[0.08] px-2 py-0.5 text-olive-600">
-						if o.AutoPrice {
+						if o.Jar {
+							{ p.T(i18n.AdminOffersKindJar) }
+						} else if o.AutoPrice {
 							{ p.T(i18n.AdminOffersPriceAuto) }
 						} else {
 							{ p.T(i18n.AdminOffersPriceFixed) }
@@ -140,14 +194,14 @@ templ adminOfferCard(p AdminPage, d OffersData, o OfferRow) {
 				</div>
 			</div>
 			if p.Owner {
-				@DeleteButton(p, "/admin/offers/"+o.ID+"/delete", p.T(i18n.AdminOffersDeleteLabel, "name", o.litersText()+" L"), "confirm-offer")
+				@DeleteButton(p, "/admin/offers/"+o.ID+"/delete", p.T(i18n.AdminOffersDeleteLabel, "name", p.sizeText(o)), "confirm-offer")
 			}
 		</div>
 		if p.Owner {
 			<details class="mt-g2 border-t border-sand-deep/60 pt-g1" open?={ d.Form.For(o.ID).Posted() }>
 				<summary class="tap inline-flex cursor-pointer list-none items-center gap-1.5 rounded-full px-2 text-sm font-medium text-olive hover:bg-sand [&::-webkit-details-marker]:hidden">
 					@IconPencil("size-4")
-					{ p.T(i18n.AdminOffersEditLabel, "name", o.litersText()+" L") }
+					{ p.T(i18n.AdminOffersEditLabel, "name", p.sizeText(o)) }
 				</summary>
 				<div class="mt-g2">
 					@offerForm(p, d, o, o.ID, "/admin/offers/"+o.ID, d.Form.For(o.ID))
@@ -158,13 +212,31 @@ templ adminOfferCard(p AdminPage, d OffersData, o OfferRow) {
 }
 
 templ offerForm(p AdminPage, d OffersData, o OfferRow, key, action string, s *FormState) {
-	<form method="post" action={ templ.SafeURL(action) } enctype="multipart/form-data" class="grid gap-g2 sm:grid-cols-2">
+	<form method="post" action={ templ.SafeURL(action) } enctype="multipart/form-data" class="offer-form grid gap-g2 sm:grid-cols-2">
 		@csrfField(p)
-		@Input(key, Field{Name: "liters", Label: p.T(i18n.AdminOffersLiters), Dir: "ltr", Mode: "decimal", Required: true, Max: 8}, o.litersText(), s)
+		<fieldset class="sm:col-span-2">
+			<legend class="mb-1.5 block font-medium text-olive">{ p.T(i18n.AdminOffersKind) }</legend>
+			<div class="grid gap-2 sm:grid-cols-2">
+				<label class="flex min-h-11 cursor-pointer items-center gap-2 rounded-field border-2 border-sand-deep p-3 has-[:checked]:border-oil has-[:checked]:bg-oil/10">
+					<input type="radio" name="kind" value="oil" checked?={ s.V("kind", kindValue(o)) == "oil" } class="size-4 accent-olive"/>
+					<span class="font-medium">{ p.T(i18n.AdminOffersKindOil) }</span>
+				</label>
+				<label class="flex min-h-11 cursor-pointer items-center gap-2 rounded-field border-2 border-sand-deep p-3 has-[:checked]:border-oil has-[:checked]:bg-oil/10">
+					<input type="radio" name="kind" value="jar" checked?={ s.V("kind", kindValue(o)) == "jar" } class="size-4 accent-olive"/>
+					<span class="font-medium">{ p.T(i18n.AdminOffersKindJar) }</span>
+				</label>
+			</div>
+		</fieldset>
+		<div data-for-oil>
+			@Input(key, Field{Name: "liters", Label: p.T(i18n.AdminOffersLiters), Dir: "ltr", Mode: "decimal", Max: 8}, litersField(o), s)
+		</div>
+		<div data-for-jar>
+			@Input(key, Field{Name: "grams", Label: p.T(i18n.AdminOffersGrams), Dir: "ltr", Mode: "numeric", Max: 6}, gramsText(o), s)
+		</div>
 		@Input(key, Field{Name: "sortOrder", Label: p.T(i18n.AdminOffersSortOrder), Dir: "ltr", Mode: "numeric", Max: 4}, int32String(o.SortOrder), s)
 		@Input(key, Field{Name: "nameAr", Label: p.T(i18n.AdminOffersNameAr), Dir: "rtl", Required: true, Max: 120}, o.NameAr, s)
 		@Input(key, Field{Name: "nameFr", Label: p.T(i18n.AdminOffersNameFr), Dir: "ltr", Required: true, Max: 120}, o.NameFr, s)
-		<fieldset class="sm:col-span-2">
+		<fieldset data-for-oil class="sm:col-span-2">
 			<legend class="mb-1.5 block font-medium text-olive">{ p.T(i18n.AdminOffersPriceMode) }</legend>
 			<div class="grid gap-2 sm:grid-cols-2">
 				<label class="flex cursor-pointer items-start gap-2 rounded-field border-2 border-sand-deep p-3 has-[:checked]:border-oil has-[:checked]:bg-oil/10">

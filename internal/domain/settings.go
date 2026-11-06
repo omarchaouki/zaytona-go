@@ -80,6 +80,8 @@ type PricingSettings struct {
 	CustomEnabled   bool                `json:"customEnabled"`
 	CustomMinLiters int                 `json:"customMinLiters"`
 	CustomMaxLiters int                 `json:"customMaxLiters"`
+	// Volume prices (promotions for large quantities), see PerLiterFor.
+	Tiers []PriceTier `json:"tiers,omitempty"`
 	// Seeded placeholder price, cleared when the owner saves a real one.
 	IsDemo bool `json:"isDemo"`
 }

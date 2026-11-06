@@ -103,3 +103,36 @@ func TestTemplateItems(t *testing.T) {
 		t.Fatalf("%q", got)
 	}
 }
+
+func TestValidateJars(t *testing.T) {
+	base := OrderInput{Name: "Fatima Zahra", Phone: "0612345678", City: "Rabat"}
+
+	in := base
+	in.Jars = map[string]string{"amlou-500g": "2", "amlou-250g": "", "zero": "0"}
+	v, errs := in.Validate()
+	if len(errs) != 0 || v.Choice != "" || len(v.Jars) != 1 || v.Jars[0] != (JarChoice{Slug: "amlou-500g", Quantity: 2}) {
+		t.Fatalf("jars only: %+v %v", v, errs)
+	}
+
+	in = base
+	in.Choice, in.Jars = "huile-30l", map[string]string{"amlou-500g": "1"}
+	if v, errs := in.Validate(); len(errs) != 0 || v.Choice != "huile-30l" || len(v.Jars) != 1 {
+		t.Fatalf("oil and jars: %+v %v", v, errs)
+	}
+
+	for raw, want := range map[string]string{"51": "validation.quantityRange", "-1": "validation.quantityRange", "x": "validation.quantityRange"} {
+		in = base
+		in.Jars = map[string]string{"amlou-500g": raw}
+		if _, errs := in.Validate(); errs["jars"] != want {
+			t.Errorf("%q: %v", raw, errs)
+		}
+	}
+	in = base
+	in.Jars = map[string]string{"Bad Slug": "1"}
+	if _, errs := in.Validate(); errs["jars"] != "validation.invalid" {
+		t.Errorf("bad slug: %v", errs)
+	}
+	if _, errs := base.Validate(); errs["choice"] != "validation.itemsRequired" {
+		t.Errorf("nothing chosen: %v", errs)
+	}
+}

@@ -96,6 +96,36 @@ func TestAdminOffers(t *testing.T) {
 		t.Fatalf("min > max: %d", rec.Code)
 	}
 
+	// Volume tier: from 30 L the litre costs 90, automatic offers follow.
+	pricing := url.Values{"pricePerLiter": {"95,5"}, "customEnabled": {"1"}, "customMin": {"5"}, "customMax": {"200"}, "tierMin1": {"30"}, "tierPrice1": {"90"}}
+	if rec := b.post("/admin/offers/pricing", pricing); rec.Code != http.StatusSeeOther {
+		t.Fatalf("tiers: %d %s", rec.Code, rec.Body.String())
+	}
+	if got := e.scalar("select price_mad::text from offers where slug = 'huile-olive-30l'"); got != "2700.00" {
+		t.Fatalf("30 L at the tier price: %s", got)
+	}
+	if got := e.scalar("select (value->'tiers'->0->>'minLiters') from settings where key = 'pricing'"); got != "30" {
+		t.Fatalf("tier not stored: %q", got)
+	}
+	half := url.Values{"pricePerLiter": {"95"}, "customMin": {"5"}, "customMax": {"200"}, "tierMin1": {"30"}}
+	if rec := b.post("/admin/offers/pricing", half); rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("half-filled tier: %d", rec.Code)
+	}
+
+	// A jar product (amlou): weight in grams, always a fixed price, no litres.
+	b.get("/admin/offers")
+	rec = b.postMultipart("/admin/offers", map[string]string{"kind": "jar", "grams": "250", "price": "45", "mode": "auto", "sortOrder": "50", "nameAr": "أملو", "nameFr": "Amlou 250", "isActive": "1"}, "photo", testPhoto(t))
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("jar: %d %s", rec.Code, rec.Body.String())
+	}
+	if got := e.scalar("select kind || ' ' || grams || ' ' || price_mad || ' ' || auto_price || ' ' || liters from offers where name_fr = 'Amlou 250'"); got != "jar 250 45.00 false 0.00" {
+		t.Fatalf("jar row: %q", got)
+	}
+	b.get("/admin/offers")
+	if rec := b.postMultipart("/admin/offers", map[string]string{"kind": "jar", "price": "45", "nameAr": "أ", "nameFr": "Sans poids"}, "photo", nil); rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("jar without grams: %d", rec.Code)
+	}
+
 	// New offer with a photo: re-encoded, served from /uploads, shown on the site.
 	b.get("/admin/offers")
 	rec = b.postMultipart("/admin/offers", map[string]string{"liters": "10", "sortOrder": "5", "nameAr": "زيت 10", "nameFr": "Huile 10", "mode": "auto", "isActive": "1"}, "photo", testPhoto(t))
@@ -119,9 +149,10 @@ func TestAdminOffers(t *testing.T) {
 	if rec := get(t, e.h, "/uploads/"+imageID+"-480.webp"); rec.Code != 200 || rec.Header().Get("Content-Type") != "image/webp" {
 		t.Fatalf("public photo: %d", rec.Code)
 	}
-	landing := get(t, e.h, "/fr").Body.String()
-	if !strings.Contains(landing, "/uploads/"+imageID) || !strings.Contains(landing, "Huile 10") {
-		t.Fatal("offer photo not on the site")
+	lrec := get(t, e.h, "/fr")
+	landing := lrec.Body.String()
+	if lrec.Code != 200 || !strings.Contains(landing, "/uploads/"+imageID) || !strings.Contains(landing, "Huile 10") {
+		t.Fatalf("offer photo not on the site (%d)", lrec.Code)
 	}
 
 	// A file that is not an image is refused, values kept.

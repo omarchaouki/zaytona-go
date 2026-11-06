@@ -28,7 +28,7 @@ func landingJSONLD(origin string, p view.Page, d *store.SiteData, v view.Landing
 		"@id":                orgID,
 		"name":               p.SiteName(),
 		"url":                pageURL,
-		"image":              origin + p.Asset("images/olives-harvest-750.webp"),
+		"image":              origin + p.Asset("images/oil-bottles-960.webp"),
 		"areaServed":         jsonObj{"@type": "Country", "name": "Morocco"},
 		"paymentAccepted":    "Cash",
 		"currenciesAccepted": "MAD",
@@ -76,8 +76,15 @@ func landingJSONLD(origin string, p view.Page, d *store.SiteData, v view.Landing
 	}
 	docs := []any{org}
 
-	for i, o := range d.Offers {
-		if o.IsDemo {
+	// Cards by slug: oil and jars are shown in two lists, and a product that is
+	// not on sale (a jar without a price) has no card and no structured data.
+	cards := map[string]view.OfferCard{}
+	for _, c := range append(append([]view.OfferCard{}, v.Offers...), v.Jars...) {
+		cards[c.Slug] = c
+	}
+	for _, o := range d.Offers {
+		card, shown := cards[o.Slug]
+		if o.IsDemo || !shown {
 			continue
 		}
 		availability := "https://schema.org/InStock"
@@ -87,7 +94,6 @@ func landingJSONLD(origin string, p view.Page, d *store.SiteData, v view.Landing
 		case "low_stock":
 			availability = "https://schema.org/LimitedAvailability"
 		}
-		card := v.Offers[i]
 		product := jsonObj{
 			"@context": "https://schema.org",
 			"@type":    "Product",

@@ -37,9 +37,9 @@ func (q *Queries) CountOffers(ctx context.Context) (int64, error) {
 
 const createOffer = `-- name: CreateOffer :one
 insert into offers (slug, name_ar, name_fr, tagline_ar, tagline_fr, liters, auto_price, price_mad,
-                    image_id, stock_status, is_active, sort_order, is_demo)
-values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-returning id, slug, name_ar, name_fr, tagline_ar, tagline_fr, liters, auto_price, price_mad, image_id, stock_status, is_active, sort_order, is_demo, created_at, updated_at
+                    image_id, stock_status, is_active, sort_order, is_demo, kind, grams)
+values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+returning id, slug, name_ar, name_fr, tagline_ar, tagline_fr, liters, auto_price, price_mad, image_id, stock_status, is_active, sort_order, is_demo, created_at, updated_at, kind, grams
 `
 
 type CreateOfferParams struct {
@@ -56,6 +56,8 @@ type CreateOfferParams struct {
 	IsActive    bool
 	SortOrder   int32
 	IsDemo      bool
+	Kind        OfferKind
+	Grams       *int32
 }
 
 func (q *Queries) CreateOffer(ctx context.Context, arg CreateOfferParams) (Offer, error) {
@@ -73,6 +75,8 @@ func (q *Queries) CreateOffer(ctx context.Context, arg CreateOfferParams) (Offer
 		arg.IsActive,
 		arg.SortOrder,
 		arg.IsDemo,
+		arg.Kind,
+		arg.Grams,
 	)
 	var i Offer
 	err := row.Scan(
@@ -92,6 +96,8 @@ func (q *Queries) CreateOffer(ctx context.Context, arg CreateOfferParams) (Offer
 		&i.IsDemo,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Kind,
+		&i.Grams,
 	)
 	return i, err
 }
@@ -106,7 +112,7 @@ func (q *Queries) DeleteOffer(ctx context.Context, id uuid.UUID) error {
 }
 
 const getActiveOffersByIDs = `-- name: GetActiveOffersByIDs :many
-select id, slug, name_ar, name_fr, tagline_ar, tagline_fr, liters, auto_price, price_mad, image_id, stock_status, is_active, sort_order, is_demo, created_at, updated_at from offers where id = any($1::uuid[]) and is_active
+select id, slug, name_ar, name_fr, tagline_ar, tagline_fr, liters, auto_price, price_mad, image_id, stock_status, is_active, sort_order, is_demo, created_at, updated_at, kind, grams from offers where id = any($1::uuid[]) and is_active
 `
 
 func (q *Queries) GetActiveOffersByIDs(ctx context.Context, ids []uuid.UUID) ([]Offer, error) {
@@ -135,6 +141,8 @@ func (q *Queries) GetActiveOffersByIDs(ctx context.Context, ids []uuid.UUID) ([]
 			&i.IsDemo,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Kind,
+			&i.Grams,
 		); err != nil {
 			return nil, err
 		}
@@ -147,7 +155,7 @@ func (q *Queries) GetActiveOffersByIDs(ctx context.Context, ids []uuid.UUID) ([]
 }
 
 const getOffer = `-- name: GetOffer :one
-select id, slug, name_ar, name_fr, tagline_ar, tagline_fr, liters, auto_price, price_mad, image_id, stock_status, is_active, sort_order, is_demo, created_at, updated_at from offers where id = $1
+select id, slug, name_ar, name_fr, tagline_ar, tagline_fr, liters, auto_price, price_mad, image_id, stock_status, is_active, sort_order, is_demo, created_at, updated_at, kind, grams from offers where id = $1
 `
 
 func (q *Queries) GetOffer(ctx context.Context, id uuid.UUID) (Offer, error) {
@@ -170,12 +178,14 @@ func (q *Queries) GetOffer(ctx context.Context, id uuid.UUID) (Offer, error) {
 		&i.IsDemo,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Kind,
+		&i.Grams,
 	)
 	return i, err
 }
 
 const getOfferBySlug = `-- name: GetOfferBySlug :one
-select id, slug, name_ar, name_fr, tagline_ar, tagline_fr, liters, auto_price, price_mad, image_id, stock_status, is_active, sort_order, is_demo, created_at, updated_at from offers where slug = $1
+select id, slug, name_ar, name_fr, tagline_ar, tagline_fr, liters, auto_price, price_mad, image_id, stock_status, is_active, sort_order, is_demo, created_at, updated_at, kind, grams from offers where slug = $1
 `
 
 func (q *Queries) GetOfferBySlug(ctx context.Context, slug string) (Offer, error) {
@@ -198,12 +208,14 @@ func (q *Queries) GetOfferBySlug(ctx context.Context, slug string) (Offer, error
 		&i.IsDemo,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Kind,
+		&i.Grams,
 	)
 	return i, err
 }
 
 const listActiveOffers = `-- name: ListActiveOffers :many
-select id, slug, name_ar, name_fr, tagline_ar, tagline_fr, liters, auto_price, price_mad, image_id, stock_status, is_active, sort_order, is_demo, created_at, updated_at from offers where is_active order by sort_order, liters
+select id, slug, name_ar, name_fr, tagline_ar, tagline_fr, liters, auto_price, price_mad, image_id, stock_status, is_active, sort_order, is_demo, created_at, updated_at, kind, grams from offers where is_active order by sort_order, liters
 `
 
 func (q *Queries) ListActiveOffers(ctx context.Context) ([]Offer, error) {
@@ -232,6 +244,8 @@ func (q *Queries) ListActiveOffers(ctx context.Context) ([]Offer, error) {
 			&i.IsDemo,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Kind,
+			&i.Grams,
 		); err != nil {
 			return nil, err
 		}
@@ -244,7 +258,7 @@ func (q *Queries) ListActiveOffers(ctx context.Context) ([]Offer, error) {
 }
 
 const listActiveOffersWithImage = `-- name: ListActiveOffersWithImage :many
-select o.id, o.slug, o.name_ar, o.name_fr, o.tagline_ar, o.tagline_fr, o.liters, o.auto_price, o.price_mad, o.image_id, o.stock_status, o.is_active, o.sort_order, o.is_demo, o.created_at, o.updated_at, m.width as image_width, m.height as image_height, m.widths as image_widths
+select o.id, o.slug, o.name_ar, o.name_fr, o.tagline_ar, o.tagline_fr, o.liters, o.auto_price, o.price_mad, o.image_id, o.stock_status, o.is_active, o.sort_order, o.is_demo, o.created_at, o.updated_at, o.kind, o.grams, m.width as image_width, m.height as image_height, m.widths as image_widths
 from offers o
 left join media m on m.id = o.image_id
 where o.is_active
@@ -268,6 +282,8 @@ type ListActiveOffersWithImageRow struct {
 	IsDemo      bool
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
+	Kind        OfferKind
+	Grams       *int32
 	ImageWidth  *int32
 	ImageHeight *int32
 	ImageWidths []int32
@@ -299,6 +315,8 @@ func (q *Queries) ListActiveOffersWithImage(ctx context.Context) ([]ListActiveOf
 			&i.IsDemo,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Kind,
+			&i.Grams,
 			&i.ImageWidth,
 			&i.ImageHeight,
 			&i.ImageWidths,
@@ -314,7 +332,7 @@ func (q *Queries) ListActiveOffersWithImage(ctx context.Context) ([]ListActiveOf
 }
 
 const listAllOffers = `-- name: ListAllOffers :many
-select id, slug, name_ar, name_fr, tagline_ar, tagline_fr, liters, auto_price, price_mad, image_id, stock_status, is_active, sort_order, is_demo, created_at, updated_at from offers order by sort_order, liters
+select id, slug, name_ar, name_fr, tagline_ar, tagline_fr, liters, auto_price, price_mad, image_id, stock_status, is_active, sort_order, is_demo, created_at, updated_at, kind, grams from offers order by sort_order, liters
 `
 
 func (q *Queries) ListAllOffers(ctx context.Context) ([]Offer, error) {
@@ -343,6 +361,8 @@ func (q *Queries) ListAllOffers(ctx context.Context) ([]Offer, error) {
 			&i.IsDemo,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Kind,
+			&i.Grams,
 		); err != nil {
 			return nil, err
 		}
@@ -355,7 +375,7 @@ func (q *Queries) ListAllOffers(ctx context.Context) ([]Offer, error) {
 }
 
 const listAllOffersWithImage = `-- name: ListAllOffersWithImage :many
-select o.id, o.slug, o.name_ar, o.name_fr, o.tagline_ar, o.tagline_fr, o.liters, o.auto_price, o.price_mad, o.image_id, o.stock_status, o.is_active, o.sort_order, o.is_demo, o.created_at, o.updated_at, m.width as image_width, m.height as image_height, m.widths as image_widths
+select o.id, o.slug, o.name_ar, o.name_fr, o.tagline_ar, o.tagline_fr, o.liters, o.auto_price, o.price_mad, o.image_id, o.stock_status, o.is_active, o.sort_order, o.is_demo, o.created_at, o.updated_at, o.kind, o.grams, m.width as image_width, m.height as image_height, m.widths as image_widths
 from offers o
 left join media m on m.id = o.image_id
 order by o.sort_order, o.liters
@@ -378,6 +398,8 @@ type ListAllOffersWithImageRow struct {
 	IsDemo      bool
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
+	Kind        OfferKind
+	Grams       *int32
 	ImageWidth  *int32
 	ImageHeight *int32
 	ImageWidths []int32
@@ -409,10 +431,43 @@ func (q *Queries) ListAllOffersWithImage(ctx context.Context) ([]ListAllOffersWi
 			&i.IsDemo,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Kind,
+			&i.Grams,
 			&i.ImageWidth,
 			&i.ImageHeight,
 			&i.ImageWidths,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAutoPricedOffers = `-- name: ListAutoPricedOffers :many
+select id, liters, price_mad from offers where auto_price and kind = 'oil' order by id
+`
+
+type ListAutoPricedOffersRow struct {
+	ID       uuid.UUID
+	Liters   decimal.Decimal
+	PriceMad decimal.Decimal
+}
+
+// Oil offers that follow the price per litre (volume tiers applied in Go).
+func (q *Queries) ListAutoPricedOffers(ctx context.Context) ([]ListAutoPricedOffersRow, error) {
+	rows, err := q.db.Query(ctx, listAutoPricedOffers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAutoPricedOffersRow{}
+	for rows.Next() {
+		var i ListAutoPricedOffersRow
+		if err := rows.Scan(&i.ID, &i.Liters, &i.PriceMad); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -453,26 +508,27 @@ func (q *Queries) ListOffersForFilter(ctx context.Context) ([]ListOffersForFilte
 	return items, nil
 }
 
-const repriceAutoOffers = `-- name: RepriceAutoOffers :execrows
-update offers set price_mad = round(liters * $1::numeric, 2)
-where auto_price
+const setOfferPrice = `-- name: SetOfferPrice :exec
+update offers set price_mad = $1::numeric where id = $2 and auto_price
 `
 
-func (q *Queries) RepriceAutoOffers(ctx context.Context, pricePerLiter decimal.Decimal) (int64, error) {
-	result, err := q.db.Exec(ctx, repriceAutoOffers, pricePerLiter)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+type SetOfferPriceParams struct {
+	PriceMad decimal.Decimal
+	ID       uuid.UUID
+}
+
+func (q *Queries) SetOfferPrice(ctx context.Context, arg SetOfferPriceParams) error {
+	_, err := q.db.Exec(ctx, setOfferPrice, arg.PriceMad, arg.ID)
+	return err
 }
 
 const updateOffer = `-- name: UpdateOffer :one
 update offers
 set slug = $2, name_ar = $3, name_fr = $4, tagline_ar = $5, tagline_fr = $6, liters = $7,
     auto_price = $8, price_mad = $9, image_id = $10, stock_status = $11, is_active = $12,
-    sort_order = $13, is_demo = false
+    sort_order = $13, is_demo = false, kind = $14, grams = $15
 where id = $1
-returning id, slug, name_ar, name_fr, tagline_ar, tagline_fr, liters, auto_price, price_mad, image_id, stock_status, is_active, sort_order, is_demo, created_at, updated_at
+returning id, slug, name_ar, name_fr, tagline_ar, tagline_fr, liters, auto_price, price_mad, image_id, stock_status, is_active, sort_order, is_demo, created_at, updated_at, kind, grams
 `
 
 type UpdateOfferParams struct {
@@ -489,6 +545,8 @@ type UpdateOfferParams struct {
 	StockStatus StockStatus
 	IsActive    bool
 	SortOrder   int32
+	Kind        OfferKind
+	Grams       *int32
 }
 
 func (q *Queries) UpdateOffer(ctx context.Context, arg UpdateOfferParams) (Offer, error) {
@@ -506,6 +564,8 @@ func (q *Queries) UpdateOffer(ctx context.Context, arg UpdateOfferParams) (Offer
 		arg.StockStatus,
 		arg.IsActive,
 		arg.SortOrder,
+		arg.Kind,
+		arg.Grams,
 	)
 	var i Offer
 	err := row.Scan(
@@ -525,6 +585,8 @@ func (q *Queries) UpdateOffer(ctx context.Context, arg UpdateOfferParams) (Offer
 		&i.IsDemo,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Kind,
+		&i.Grams,
 	)
 	return i, err
 }

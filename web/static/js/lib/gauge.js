@@ -3,6 +3,7 @@
 // JS the form is a plain GET to ?offer=custom&liters=<n>#order. With the order
 // form on the page, "order this quantity" fills it in place instead.
 import { fill, formatMad } from './format.js'
+import { perLiterFor } from './order.js'
 
 export function initGauge() {
   for (const form of document.querySelectorAll('[data-gauge]')) {
@@ -15,13 +16,19 @@ export function initGauge() {
     const result = form.querySelector('[data-gauge-result]')
     const total = form.querySelector('[data-gauge-total]')
     const clamp = (v) => Math.min(max, Math.max(min, Math.round(v)))
+    let tiers = []
+    try {
+      tiers = JSON.parse(form.dataset.tiers || '[]')
+    } catch {}
 
     const render = (liters) => {
       form.style.setProperty('--fill', String(max > 0 ? Math.max(0.06, liters / max) : 0.5))
+      // Volume tiers lower the price of each litre for large quantities.
+      const ppl = perLiterFor(liters, perLiter, Array.isArray(tiers) ? tiers : [])
       if (result) {
-        result.textContent = fill(form.dataset.result || '', { liters, price: form.dataset.perLiterLabel || '' })
+        result.textContent = fill(form.dataset.result || '', { liters, price: formatMad(ppl, form.dataset.currency || '') })
       }
-      if (total) total.textContent = formatMad(liters * perLiter, form.dataset.currency || '')
+      if (total) total.textContent = formatMad(Math.round(liters * ppl * 100) / 100, form.dataset.currency || '')
     }
     const current = () => {
       const v = Number.parseInt(number.value, 10)

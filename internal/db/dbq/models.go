@@ -188,6 +188,48 @@ func (ns NullMediaKind) Value() (driver.Value, error) {
 	return string(ns.MediaKind), nil
 }
 
+type OfferKind string
+
+const (
+	OfferKindOil OfferKind = "oil"
+	OfferKindJar OfferKind = "jar"
+)
+
+func (e *OfferKind) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = OfferKind(s)
+	case string:
+		*e = OfferKind(s)
+	default:
+		return fmt.Errorf("unsupported scan type for OfferKind: %T", src)
+	}
+	return nil
+}
+
+type NullOfferKind struct {
+	OfferKind OfferKind
+	Valid     bool // Valid is true if OfferKind is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullOfferKind) Scan(value interface{}) error {
+	if value == nil {
+		ns.OfferKind, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.OfferKind.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullOfferKind) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.OfferKind), nil
+}
+
 type OrderEventKind string
 
 const (
@@ -487,6 +529,8 @@ type Offer struct {
 	IsDemo      bool
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
+	Kind        OfferKind
+	Grams       *int32
 }
 
 type Order struct {
@@ -536,6 +580,7 @@ type OrderItem struct {
 	UnitPrice decimal.Decimal
 	Quantity  int32
 	Position  int16
+	Grams     *int32
 }
 
 type PowUsed struct {

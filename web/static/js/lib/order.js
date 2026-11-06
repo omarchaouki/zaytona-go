@@ -14,7 +14,31 @@ const DRAFT_KEY = 'order-draft'
 const DRAFT_TTL = 7 * 24 * 60 * 60 * 1000
 const DRAFT_FIELDS = ['offer', 'liters', 'name', 'phone', 'city', 'address', 'note']
 const FIELD_IDS = { customLiters: 'order-liters', name: 'order-name', phone: 'order-phone', city: 'order-city', address: 'order-address', note: 'order-note' }
-const STEP_OF = { choice: 0, customLiters: 0, name: 1, phone: 1, city: 1, address: 1, note: 1 }
+const STEP_OF = { choice: 0, customLiters: 0, jars: 0, name: 1, phone: 1, city: 1, address: 1, note: 1 }
+const MAX_JARS = 50
+
+// Price of one litre in a line of n litres: the volume tier with the largest
+// threshold reached, else the base price (same rule as domain.PerLiterFor).
+export function perLiterFor(n, base, tiers) {
+  let price = base
+  let best = 0
+  for (const t of tiers) {
+    if (t.min > best && n >= t.min) {
+      best = t.min
+      price = Number(t.price)
+    }
+  }
+  return price
+}
+
+const parseTiers = (raw) => {
+  try {
+    const t = JSON.parse(raw || '[]')
+    return Array.isArray(t) ? t.filter((x) => Number.isInteger(x.min) && Number(x.price) > 0) : []
+  } catch {
+    return []
+  }
+}
 
 // Same rules as domain.NormalizeMoroccanPhone.
 export function normalizePhone(input) {
@@ -74,13 +98,18 @@ export function initOrderForm(signal) {
 
   const field = (name) => form.elements.namedItem(name)
   const choice = () => form.querySelector('input[name="offer"]:checked')?.value || ''
+  const jarInputs = () => [...form.querySelectorAll('[data-jar-qty]')]
+  const jarCount = (input) => {
+    const n = Number.parseInt(input.value, 10)
+    return Number.isInteger(n) && n > 0 ? n : 0
+  }
   const money = (v) => formatMad(v, msg.currency)
 
   // ------------------------------------------------------------ errors
   function setError(name, text) {
     const el =
-      name === 'choice' ? form.querySelector('#choice-error') : form.querySelector(`#${FIELD_IDS[name]}-error`)
-    const input = name === 'choice' ? null : form.querySelector(`#${FIELD_IDS[name]}`)
+      name === 'choice' || name === 'jars' ? form.querySelector(`#${name}-error`) : form.querySelector(`#${FIELD_IDS[name]}-error`)
+    const input = name === 'choice' || name === 'jars' ? null : form.querySelector(`#${FIELD_IDS[name]}`)
     if (el) {
       el.textContent = text || ''
       el.hidden = !text
@@ -106,7 +135,9 @@ export function initOrderForm(signal) {
     const errs = {}
     if (i === 0) {
       const c = choice()
-      if (!c) errs.choice = msg.itemsRequired
+      const badJar = jarInputs().some((input) => input.value.trim() !== '' && !(Number(input.value) >= 0 && Number(input.value) <= MAX_JARS && Number.isInteger(Number(input.value))))
+      if (badJar) errs.jars = msg.quantityRange
+      else if (!c && !jarInputs().some(jarCount)) errs.choice = msg.itemsRequired
       if (c === 'custom') {
         const radio = form.querySelector('input[name="offer"][value="custom"]')
         const raw = field('liters').value.trim()
@@ -128,7 +159,7 @@ export function initOrderForm(signal) {
       if (field('address').value.trim().length > 300) errs.address = msg.addressTooLong
       if (field('note').value.trim().length > 500) errs.note = msg.noteTooLong
     }
-    const names = i === 0 ? ['choice', 'customLiters'] : i === 1 ? ['name', 'phone', 'city', 'address', 'note'] : []
+    const names = i === 0 ? ['choice', 'customLiters', 'jars'] : i === 1 ? ['name', 'phone', 'city', 'address', 'note'] : []
     for (const n of names) setError(n, errs[n])
     return Object.keys(errs).length === 0
   }
@@ -142,16 +173,23 @@ export function initOrderForm(signal) {
 
   // ---------------------------------------------------------- totals
   function lines() {
+    const out = []
     const c = choice()
-    if (!c) return []
-    const radio = form.querySelector(`input[name="offer"][value="${CSS.escape(c)}"]`)
+    const radio = c && form.querySelector(`input[name="offer"][value="${CSS.escape(c)}"]`)
     if (c === 'custom') {
       const n = Number.parseInt(field('liters').value, 10)
-      if (!(n > 0)) return []
-      const price = Math.round(Number(radio.dataset.pricePerLiter) * n * 100) / 100
-      return [{ label: fill(msg.customLine, { liters: n }), amount: price, quantity: 1 }]
+      if (n > 0) {
+        const ppl = perLiterFor(n, Number(radio.dataset.pricePerLiter), parseTiers(radio.dataset.tiers))
+        out.push({ label: fill(msg.customLine, { liters: n }), amount: Math.round(ppl * n * 100) / 100, quantity: 1, custom: true })
+      }
+    } else if (radio) {
+      out.push({ label: radio.dataset.label, amount: Number(radio.dataset.price), quantity: 1 })
     }
-    return [{ label: radio.dataset.label, amount: Number(radio.dataset.price), quantity: 1 }]
+    for (const input of jarInputs()) {
+      const n = jarCount(input)
+      if (n > 0 && n <= MAX_JARS) out.push({ label: input.dataset.label, amount: Number(input.dataset.price), quantity: n })
+    }
+    return out
   }
 
   function totals() {
@@ -182,7 +220,7 @@ export function initOrderForm(signal) {
         const li = document.createElement('li')
         li.className = 'flex justify-between gap-3'
         const a = document.createElement('span')
-        a.textContent = l.label
+        a.textContent = l.quantity > 1 ? `${l.quantity} \u00d7 ${l.label}` : l.label
         const b = document.createElement('span')
         b.className = 'shrink-0 font-medium tabular-nums'
         b.textContent = money(l.amount * l.quantity)
@@ -241,6 +279,9 @@ export function initOrderForm(signal) {
         const v = f === 'offer' ? choice() : field(f)?.value
         if (v) values[f] = v
       }
+      const jars = {}
+      for (const input of jarInputs()) if (jarCount(input)) jars[input.dataset.slug] = String(jarCount(input))
+      if (Object.keys(jars).length) values.jars = JSON.stringify(jars)
       if (!Object.keys(values).length && step === 0) localStorage.removeItem(DRAFT_KEY)
       else localStorage.setItem(DRAFT_KEY, JSON.stringify({ at: Date.now(), values, step }))
     } catch {}
@@ -261,6 +302,13 @@ export function initOrderForm(signal) {
           if (radio && !choice()) radio.checked = true
         } else if (field(f) && !field(f).value) {
           field(f).value = v
+        }
+      }
+      if (typeof d.values?.jars === 'string' && d.values.jars.length < 600) {
+        const jars = JSON.parse(d.values.jars)
+        for (const input of jarInputs()) {
+          const n = Number(jars?.[input.dataset.slug])
+          if (!input.value && Number.isInteger(n) && n > 0 && n <= MAX_JARS) input.value = String(n)
         }
       }
       if (Number.isInteger(d.step)) step = Math.min(Math.max(d.step, 0), 2)
@@ -345,7 +393,7 @@ export function initOrderForm(signal) {
     const number = form.dataset.waNumber
     if (!number) return null
     const items = lines()
-      .map((l) => (choice() === 'custom' ? l.label : `${l.quantity} \u00d7 ${l.label}`))
+      .map((l) => (l.custom ? l.label : `${l.quantity} \u00d7 ${l.label}`))
       .join(locale === 'ar' ? '\u060c ' : ', ')
     const dash = '-'
     const text = fill(msg.whatsappOrder, {
@@ -440,6 +488,15 @@ export function initOrderForm(signal) {
     send(Boolean(confirm))
   })
   back.addEventListener('click', () => show(Math.max(0, step - 1)))
+  // Jar quantities: - and + step the number field (0 to 50).
+  form.addEventListener('click', (e) => {
+    const b = e.target instanceof Element ? e.target.closest('[data-qty-step]') : null
+    if (!b) return
+    const input = form.querySelector(`#${CSS.escape(b.dataset.for)}`)
+    if (!input) return
+    input.value = String(Math.min(MAX_JARS, Math.max(0, jarCount(input) + Number(b.dataset.qtyStep))))
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
   for (const b of form.querySelectorAll('[data-goto]')) {
     b.addEventListener('click', () => {
       const i = Number(b.dataset.goto)
@@ -466,6 +523,20 @@ export function initOrderForm(signal) {
       renderTotals()
       show(0, false)
       if (e.detail === 'custom') requestAnimationFrame(() => field('liters')?.focus())
+    },
+    { signal },
+  )
+
+  // A jar picked on a card (landing.js): at least one of it, step 1 again.
+  window.addEventListener(
+    'jar:add',
+    (e) => {
+      const input = form.querySelector(`[data-jar-qty][data-slug="${CSS.escape(e.detail)}"]`)
+      if (!input) return
+      if (!jarCount(input)) input.value = '1'
+      renderTotals()
+      show(0, false)
+      requestAnimationFrame(() => input.focus())
     },
     { signal },
   )

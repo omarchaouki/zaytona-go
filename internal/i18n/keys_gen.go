@@ -243,8 +243,13 @@ const (
 	AdminOffersEmpty                Key = "admin.offers.empty"
 	AdminOffersError                Key = "admin.offers.error"
 	AdminOffersErrorNoPrice         Key = "admin.offers.errorNoPrice"
+	AdminOffersGrams                Key = "admin.offers.grams"
 	AdminOffersHidden               Key = "admin.offers.hidden"
 	AdminOffersIntro                Key = "admin.offers.intro"
+	AdminOffersJarFixedPrice        Key = "admin.offers.jarFixedPrice"
+	AdminOffersKind                 Key = "admin.offers.kind"
+	AdminOffersKindJar              Key = "admin.offers.kindJar"
+	AdminOffersKindOil              Key = "admin.offers.kindOil"
 	AdminOffersLiters               Key = "admin.offers.liters"
 	AdminOffersMadPerLiter          Key = "admin.offers.madPerLiter"
 	AdminOffersNameAr               Key = "admin.offers.nameAr"
@@ -265,6 +270,15 @@ const (
 	AdminOffersSortOrder            Key = "admin.offers.sortOrder"
 	AdminOffersTaglineAr            Key = "admin.offers.taglineAr"
 	AdminOffersTaglineFr            Key = "admin.offers.taglineFr"
+	AdminOffersTierDuplicate        Key = "admin.offers.tierDuplicate"
+	AdminOffersTierIncomplete       Key = "admin.offers.tierIncomplete"
+	AdminOffersTierMin              Key = "admin.offers.tierMin"
+	AdminOffersTierMinRange         Key = "admin.offers.tierMinRange"
+	AdminOffersTierPrice            Key = "admin.offers.tierPrice"
+	AdminOffersTierPriceRange       Key = "admin.offers.tierPriceRange"
+	AdminOffersTierTooMany          Key = "admin.offers.tierTooMany"
+	AdminOffersTiersHint            Key = "admin.offers.tiersHint"
+	AdminOffersTiersTitle           Key = "admin.offers.tiersTitle"
 	AdminOffersTitle                Key = "admin.offers.title"
 	AdminOrderAddress               Key = "admin.order.address"
 	AdminOrderBack                  Key = "admin.order.back"
@@ -705,13 +719,19 @@ const (
 	OrderFormErrorSummary           Key = "orderForm.errorSummary"
 	OrderFormErrorUnavailable       Key = "orderForm.errorUnavailable"
 	OrderFormHoneypot               Key = "orderForm.honeypot"
+	OrderFormJarLine                Key = "orderForm.jarLine"
+	OrderFormJarsHint               Key = "orderForm.jarsHint"
+	OrderFormJarsLegend             Key = "orderForm.jarsLegend"
+	OrderFormLess                   Key = "orderForm.less"
 	OrderFormLitersHint             Key = "orderForm.litersHint"
 	OrderFormLitersLabel            Key = "orderForm.litersLabel"
 	OrderFormLitersUnit             Key = "orderForm.litersUnit"
+	OrderFormMore                   Key = "orderForm.more"
 	OrderFormName                   Key = "orderForm.name"
 	OrderFormNext                   Key = "orderForm.next"
 	OrderFormNote                   Key = "orderForm.note"
 	OrderFormNotePlaceholder        Key = "orderForm.notePlaceholder"
+	OrderFormOilNone                Key = "orderForm.oilNone"
 	OrderFormOptional               Key = "orderForm.optional"
 	OrderFormPayOnDelivery          Key = "orderForm.payOnDelivery"
 	OrderFormPhone                  Key = "orderForm.phone"
@@ -752,7 +772,10 @@ const (
 	ProductsHelp                    Key = "products.help"
 	ProductsHelpLink                Key = "products.helpLink"
 	ProductsIntro                   Key = "products.intro"
+	ProductsJarSize                 Key = "products.jarSize"
+	ProductsJarsTitle               Key = "products.jarsTitle"
 	ProductsLowStock                Key = "products.lowStock"
+	ProductsOilTitle                Key = "products.oilTitle"
 	ProductsOrderLabel              Key = "products.orderLabel"
 	ProductsOrderShort              Key = "products.orderShort"
 	ProductsOutOfStock              Key = "products.outOfStock"
@@ -760,6 +783,9 @@ const (
 	ProductsPerLiter                Key = "products.perLiter"
 	ProductsPerLiterUnit            Key = "products.perLiterUnit"
 	ProductsQualityReport           Key = "products.qualityReport"
+	ProductsTierBadge               Key = "products.tierBadge"
+	ProductsTierLine                Key = "products.tierLine"
+	ProductsTiersTitle              Key = "products.tiersTitle"
 	ProductsTitle                   Key = "products.title"
 	ReasonsCodBody                  Key = "reasons.codBody"
 	ReasonsCodTitle                 Key = "reasons.codTitle"
@@ -871,6 +897,7 @@ const (
 	ValidationNoteTooLong           Key = "validation.noteTooLong"
 	ValidationPhoneInvalid          Key = "validation.phoneInvalid"
 	ValidationPhoneRequired         Key = "validation.phoneRequired"
+	ValidationQuantityRange         Key = "validation.quantityRange"
 	WhatsappFloatingLabel           Key = "whatsapp.floatingLabel"
 	WhatsappGreeting                Key = "whatsapp.greeting"
 	WhatsappTooltip                 Key = "whatsapp.tooltip"
@@ -1151,8 +1178,13 @@ var AllKeys = []Key{
 	AdminOffersEmpty,
 	AdminOffersError,
 	AdminOffersErrorNoPrice,
+	AdminOffersGrams,
 	AdminOffersHidden,
 	AdminOffersIntro,
+	AdminOffersJarFixedPrice,
+	AdminOffersKind,
+	AdminOffersKindJar,
+	AdminOffersKindOil,
 	AdminOffersLiters,
 	AdminOffersMadPerLiter,
 	AdminOffersNameAr,
@@ -1173,6 +1205,15 @@ var AllKeys = []Key{
 	AdminOffersSortOrder,
 	AdminOffersTaglineAr,
 	AdminOffersTaglineFr,
+	AdminOffersTierDuplicate,
+	AdminOffersTierIncomplete,
+	AdminOffersTierMin,
+	AdminOffersTierMinRange,
+	AdminOffersTierPrice,
+	AdminOffersTierPriceRange,
+	AdminOffersTierTooMany,
+	AdminOffersTiersHint,
+	AdminOffersTiersTitle,
 	AdminOffersTitle,
 	AdminOrderAddress,
 	AdminOrderBack,
@@ -1613,13 +1654,19 @@ var AllKeys = []Key{
 	OrderFormErrorSummary,
 	OrderFormErrorUnavailable,
 	OrderFormHoneypot,
+	OrderFormJarLine,
+	OrderFormJarsHint,
+	OrderFormJarsLegend,
+	OrderFormLess,
 	OrderFormLitersHint,
 	OrderFormLitersLabel,
 	OrderFormLitersUnit,
+	OrderFormMore,
 	OrderFormName,
 	OrderFormNext,
 	OrderFormNote,
 	OrderFormNotePlaceholder,
+	OrderFormOilNone,
 	OrderFormOptional,
 	OrderFormPayOnDelivery,
 	OrderFormPhone,
@@ -1660,7 +1707,10 @@ var AllKeys = []Key{
 	ProductsHelp,
 	ProductsHelpLink,
 	ProductsIntro,
+	ProductsJarSize,
+	ProductsJarsTitle,
 	ProductsLowStock,
+	ProductsOilTitle,
 	ProductsOrderLabel,
 	ProductsOrderShort,
 	ProductsOutOfStock,
@@ -1668,6 +1718,9 @@ var AllKeys = []Key{
 	ProductsPerLiter,
 	ProductsPerLiterUnit,
 	ProductsQualityReport,
+	ProductsTierBadge,
+	ProductsTierLine,
+	ProductsTiersTitle,
 	ProductsTitle,
 	ReasonsCodBody,
 	ReasonsCodTitle,
@@ -1779,6 +1832,7 @@ var AllKeys = []Key{
 	ValidationNoteTooLong,
 	ValidationPhoneInvalid,
 	ValidationPhoneRequired,
+	ValidationQuantityRange,
 	WhatsappFloatingLabel,
 	WhatsappGreeting,
 	WhatsappTooltip,

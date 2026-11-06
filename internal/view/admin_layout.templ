@@ -118,7 +118,7 @@ func adminSideClass(active bool) string {
 }
 
 templ adminSidebar(p AdminPage) {
-	<aside data-print-hide class="sticky top-0 hidden h-dvh overflow-y-auto bg-olive-950 text-limewash lg:block">
+	<aside id="admin-sidebar" data-keep-scroll data-print-hide class="sticky top-0 hidden h-dvh overflow-y-auto bg-olive-950 text-limewash lg:block">
 		<div class="flex items-center gap-2.5 px-5 py-6">
 			@ArchMark("h-7 w-5")
 			<span class="font-display text-base font-bold">{ p.T(i18n.AdminNavBrand) }</span>

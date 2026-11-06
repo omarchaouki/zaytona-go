@@ -18,21 +18,24 @@ select count(*) from offers;
 
 -- name: CreateOffer :one
 insert into offers (slug, name_ar, name_fr, tagline_ar, tagline_fr, liters, auto_price, price_mad,
-                    image_id, stock_status, is_active, sort_order, is_demo)
-values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                    image_id, stock_status, is_active, sort_order, is_demo, kind, grams)
+values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 returning *;
 
 -- name: UpdateOffer :one
 update offers
 set slug = $2, name_ar = $3, name_fr = $4, tagline_ar = $5, tagline_fr = $6, liters = $7,
     auto_price = $8, price_mad = $9, image_id = $10, stock_status = $11, is_active = $12,
-    sort_order = $13, is_demo = false
+    sort_order = $13, is_demo = false, kind = $14, grams = $15
 where id = $1
 returning *;
 
--- name: RepriceAutoOffers :execrows
-update offers set price_mad = round(liters * @price_per_liter::numeric, 2)
-where auto_price;
+-- name: ListAutoPricedOffers :many
+-- Oil offers that follow the price per litre (volume tiers applied in Go).
+select id, liters, price_mad from offers where auto_price and kind = 'oil' order by id;
+
+-- name: SetOfferPrice :exec
+update offers set price_mad = @price_mad::numeric where id = @id and auto_price;
 
 -- name: DeleteOffer :exec
 delete from offers where id = $1;

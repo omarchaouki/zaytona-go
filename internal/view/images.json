@@ -1,32 +1,52 @@
 {
-  "grove-green": {
-    "widths": [480, 960, 1008],
-    "width": 1008,
-    "height": 509
+  "amlou-jars": {
+    "widths": [480, 564],
+    "width": 564,
+    "height": 558
   },
-  "grove-panorama": {
-    "widths": [480, 960, 1600, 1920],
-    "width": 1920,
-    "height": 650
+  "brand-cards": {
+    "widths": [480, 960, 1179],
+    "width": 1179,
+    "height": 682
   },
-  "grove-path": {
-    "widths": [480, 960, 1600],
-    "width": 1600,
-    "height": 1066
+  "coop-logo": {
+    "widths": [480, 720],
+    "width": 720,
+    "height": 1280
   },
-  "oil-pour": {
-    "widths": [453],
-    "width": 453,
-    "height": 453
+  "mill-bottles": {
+    "widths": [480, 960, 1280],
+    "width": 1280,
+    "height": 960
   },
-  "olives-golden-hour": {
-    "widths": [480, 960, 1600],
-    "width": 1600,
-    "height": 900
+  "mill-team": {
+    "widths": [480, 960, 1280],
+    "width": 1280,
+    "height": 960
   },
-  "olives-harvest": {
-    "widths": [480, 750],
-    "width": 750,
-    "height": 1029
+  "oil-bottle": {
+    "widths": [480, 960],
+    "width": 960,
+    "height": 1280
+  },
+  "oil-bottles": {
+    "widths": [480, 960, 1280],
+    "width": 1280,
+    "height": 960
+  },
+  "olives-crates": {
+    "widths": [480, 720],
+    "width": 720,
+    "height": 1280
+  },
+  "olives-pile": {
+    "widths": [480, 720],
+    "width": 720,
+    "height": 1280
+  },
+  "olives-ripeness": {
+    "widths": [480, 590],
+    "width": 590,
+    "height": 787
   }
 }

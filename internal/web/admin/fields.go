@@ -34,7 +34,7 @@ var allowedFields = map[string][]string{
 	"POST /admin/orders/{id}/note":   {"note"},
 	"POST /admin/orders/{id}/delete": {"return", "confirm"},
 
-	"POST /admin/offers/pricing":     {"pricePerLiter", "customEnabled", "customMin", "customMax"},
+	"POST /admin/offers/pricing":     {"pricePerLiter", "customEnabled", "customMin", "customMax", "tierMin*", "tierPrice*"},
 	"POST /admin/offers":             offerFields,
 	"POST /admin/offers/{id}":        offerFields,
 	"POST /admin/offers/{id}/delete": {"confirm"},
@@ -77,7 +77,7 @@ var allowedFields = map[string][]string{
 }
 
 var (
-	offerFields = []string{"liters", "sortOrder", "nameAr", "nameFr", "mode", "price", "taglineAr", "taglineFr", "removePhoto", "isActive", "file:photo"}
+	offerFields = []string{"kind", "liters", "grams", "sortOrder", "nameAr", "nameFr", "mode", "price", "taglineAr", "taglineFr", "removePhoto", "isActive", "file:photo"}
 	certFields  = []string{"type", "number", "labelAr", "labelFr", "issued", "expires", "isPublic", "file:scan"}
 	faqFields   = []string{"questionAr", "questionFr", "answerAr", "answerFr", "isActive"}
 )

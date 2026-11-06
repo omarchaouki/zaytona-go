@@ -67,7 +67,13 @@
     "gaugeHint": "De {min} à {max} L. Le total se calcule au prix du litre.",
     "gaugeResult": "{liters} L à {price} le litre",
     "gaugeSubmit": "Commander cette quantité",
-    "perLiterUnit": "le litre"
+    "perLiterUnit": "le litre",
+    "oilTitle": "Huile d’olive vierge extra",
+    "jarsTitle": "Amlou et autres produits",
+    "tiersTitle": "Prix dégressif",
+    "tierLine": "Dès {liters} L : {price} le litre",
+    "tierBadge": "Prix dégressif",
+    "jarSize": "{grams} g"
   },
   "whyUs": {
     "title": "Commander en toute confiance",
@@ -252,7 +258,13 @@
     "retry": "Réessayer",
     "sendByWhatsapp": "Envoyer la commande sur WhatsApp",
     "draftKept": "Vos informations sont gardées : vous pouvez réessayer ou recharger la page sans rien perdre.",
-    "whatsappOrder": "Bonjour, je souhaite commander :\nCommande : {items}\nNom : {name}\nTéléphone : {phone}\nVille : {city}\nAdresse : {address}"
+    "whatsappOrder": "Bonjour, je souhaite commander :\nCommande : {items}\nNom : {name}\nTéléphone : {phone}\nVille : {city}\nAdresse : {address}",
+    "jarsLegend": "Ajoutez de l’amlou",
+    "jarsHint": "Choisissez le nombre de pots (facultatif).",
+    "oilNone": "Pas d’huile, seulement les pots",
+    "less": "Un pot de moins : {name}",
+    "more": "Un pot de plus : {name}",
+    "jarLine": "{name} {size}"
   },
   "validation": {
     "nameRequired": "Indiquez votre nom complet.",
@@ -267,7 +279,8 @@
     "itemsTooMany": "Trop de produits.",
     "invalid": "Vérifiez ce champ.",
     "litersRange": "Choisissez un nombre de litres dans les limites indiquées.",
-    "litersRequired": "Indiquez le nombre de litres."
+    "litersRequired": "Indiquez le nombre de litres.",
+    "quantityRange": "Choisissez entre 1 et 50 pots."
   },
   "confirmation": {
     "metaTitle": "Commande enregistrée",
@@ -620,7 +633,21 @@
       "cancel": "Annuler",
       "photo": "Photo de l’offre (facultative)",
       "deleted": "Offre supprimée.",
-      "rangeError": "Le minimum doit être inférieur ou égal au maximum."
+      "rangeError": "Le minimum doit être inférieur ou égal au maximum.",
+      "kind": "Type de produit",
+      "kindOil": "Huile au litre",
+      "kindJar": "Pot (amlou, miel…)",
+      "grams": "Poids du pot (g)",
+      "jarFixedPrice": "Un pot a toujours un prix fixe : indiquez son prix.",
+      "tiersTitle": "Prix dégressif (grandes quantités)",
+      "tiersHint": "À partir d’un nombre de litres, chaque litre coûte moins cher. S’applique à la quantité libre et aux offres en prix automatique. Laissez une ligne vide pour ne pas l’utiliser.",
+      "tierMin": "À partir de (L)",
+      "tierPrice": "Prix du litre (MAD)",
+      "tierMinRange": "Entre 2 et 10000 litres.",
+      "tierDuplicate": "Deux lignes ont le même nombre de litres.",
+      "tierPriceRange": "Indiquez un prix supérieur à 0.",
+      "tierTooMany": "Quatre lignes au maximum.",
+      "tierIncomplete": "Remplissez les deux champs de la ligne, ou videz-les."
     },
     "settings": {
       "title": "Paramètres",

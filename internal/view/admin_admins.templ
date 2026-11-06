@@ -175,9 +175,9 @@ type AuditData struct {
 
 // AuditRow is one audit entry.
 type AuditRow struct {
-	At                     time.Time
-	Actor, Action, Target  string
-	Details                string
+	At                    time.Time
+	Actor, Action, Target string
+	Details               string
 }
 
 templ AdminAudit(p AdminPage, d AuditData) {

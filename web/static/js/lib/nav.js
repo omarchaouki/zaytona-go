@@ -42,6 +42,48 @@ function runPage() {
 
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches
 
+// Why a navigation became a full load, in the browser console (diagnosis on
+// a live server: open the developer tools and click).
+const fullLoad = (reason, href) => console.info(`[nav] full load (${reason}): ${href}`)
+
+// Prefetch: a link the pointer rests on (or a finger touches) is fetched
+// ahead; the click then swaps at once. GET only (GET never changes data on
+// this site), same site, kept 15 s and used once, two at a time at most,
+// never with Save-Data.
+const PREFETCH_TTL = 15000
+const prefetched = new Map()
+let prefetching = 0
+
+function fetchPage(href) {
+  return fetch(href, { credentials: 'same-origin', redirect: 'follow', headers: { Accept: 'text/html' } }).then(async (res) => {
+    const type = res.headers.get('Content-Type') || ''
+    return {
+      status: res.status,
+      url: res.url,
+      redirected: res.redirected,
+      type,
+      html: type.includes('text/html') ? await res.text() : '',
+    }
+  })
+}
+
+function prefetch(url) {
+  const key = url.href.split('#')[0]
+  const hit = prefetched.get(key)
+  if ((hit && Date.now() - hit.at < PREFETCH_TTL) || prefetching >= 2 || navigator.connection?.saveData) return
+  prefetching++
+  const page = fetchPage(key).finally(() => prefetching--)
+  page.catch(() => prefetched.delete(key))
+  prefetched.set(key, { at: Date.now(), page })
+}
+
+function takePrefetched(url) {
+  const key = url.href.split('#')[0]
+  const hit = prefetched.get(key)
+  prefetched.delete(key)
+  return hit && Date.now() - hit.at < PREFETCH_TTL ? hit.page : null
+}
+
 // Assets that define a "part" of the site: if they differ, swap is unsafe.
 const assetKey = (doc) =>
   [...doc.querySelectorAll('head link[rel="stylesheet"], head script[src]')]
@@ -72,6 +114,7 @@ function saveScroll() {
 export async function visit(href, { replace = false, keepScroll = false } = {}) {
   const url = new URL(href, location.href)
   if (url.origin !== location.origin || !swappablePath(url)) {
+    fullLoad('other site or a file', url.href)
     location.assign(url.href)
     return
   }
@@ -83,6 +126,7 @@ export function submit(form, submitter) {
   const method = (submitter?.getAttribute('formmethod') || form.getAttribute('method') || 'get').toLowerCase()
   const action = new URL(submitter?.getAttribute('formaction') || form.getAttribute('action') || location.href, location.href)
   if (action.origin !== location.origin || !swappablePath(action)) {
+    fullLoad('form to another site', action.href)
     form.submit()
     return
   }
@@ -103,23 +147,35 @@ async function load(url, init, { replace = false, keepScroll = false, form, subm
   let res
   let html
   try {
-    res = await fetch(url.href, {
-      ...init,
-      credentials: 'same-origin',
-      redirect: 'follow',
-      headers: { Accept: 'text/html' },
-    })
-    const type = res.headers.get('Content-Type') || ''
-    if (!type.includes('text/html')) {
+    // A POST may change what any page shows: nothing fetched before it is used.
+    if (init.method !== 'GET') prefetched.clear()
+    const ready = init.method === 'GET' ? takePrefetched(url) : null
+    if (ready) {
+      res = await ready
+    } else {
+      const r = await fetch(url.href, {
+        ...init,
+        credentials: 'same-origin',
+        redirect: 'follow',
+        headers: { Accept: 'text/html' },
+      })
+      const type = r.headers.get('Content-Type') || ''
+      res = { status: r.status, url: r.url, redirected: r.redirected, type, html: type.includes('text/html') ? await r.text() : '' }
+    }
+    if (!res.type.includes('text/html')) {
       // Not a page (a file, JSON): a GET opens it; a POST is never re-sent.
       doneProgress()
+      fullLoad('not a page', url.href)
       if (init.method === 'GET') location.assign(res.url || url.href)
       else location.assign(res.redirected ? res.url : location.href)
       return
     }
-    html = await res.text()
+    html = res.html
   } catch {
-    if (ticket === navigating) fallback(url, init, form, submitter)
+    if (ticket === navigating) {
+      fullLoad('network error', url.href)
+      fallback(url, init, form, submitter)
+    }
     return
   }
   if (ticket !== navigating) return // a newer navigation won
@@ -127,10 +183,12 @@ async function load(url, init, { replace = false, keepScroll = false, form, subm
   const finalURL = new URL(res.url || url.href)
   if (url.hash && !finalURL.hash) finalURL.hash = url.hash
   const doc = new DOMParser().parseFromString(html, 'text/html')
-  if (assetKey(doc) !== assetKey(document) || doc.body.querySelector('script:not([type="application/ld+json"])')) {
+  const otherAssets = assetKey(doc) !== assetKey(document)
+  if (otherAssets || doc.body.querySelector('script:not([type="application/ld+json"])')) {
     // Another part of the site, or a page with its own scripts: load it
     // fully. A POST is never sent twice: show where it led (or reload).
     doneProgress()
+    fullLoad(otherAssets ? 'other scripts or styles' : 'page with its own script', finalURL.href)
     location.assign(init.method === 'GET' || res.redirected ? finalURL.href : location.href)
     return
   }
@@ -150,6 +208,7 @@ async function load(url, init, { replace = false, keepScroll = false, form, subm
     else history.pushState(state, '', shown.href)
   }
   doneProgress()
+  prefetched.clear() // fetched for the old page: start fresh
   runPage()
   place(finalURL, { keepScroll, scroll, form, status: res.status })
   announce(document.title)
@@ -176,6 +235,8 @@ function fallback(url, init, form, submitter, finalHref) {
 }
 
 function swap(doc) {
+  // Scroll positions of kept containers (the admin sidebar) survive the swap.
+  const kept = [...document.querySelectorAll('[data-keep-scroll][id]')].map((el) => [el.id, el.scrollTop])
   document.title = doc.title
   for (const el of document.head.querySelectorAll(HEAD_PAGE)) el.remove()
   for (const el of doc.head.querySelectorAll(HEAD_PAGE)) document.head.append(document.importNode(el, true))
@@ -188,6 +249,10 @@ function swap(doc) {
   for (const { name } of [...body.attributes]) body.removeAttribute(name)
   for (const { name, value } of [...doc.body.attributes]) body.setAttribute(name, value)
   body.replaceChildren(...[...doc.body.childNodes].map((n) => document.importNode(n, true)))
+  for (const [id, top] of kept) {
+    const el = document.getElementById(id)
+    if (el) el.scrollTop = top
+  }
   delete html.dataset.mobileBar
 }
 
@@ -252,6 +317,25 @@ function onClick(event) {
   load(url, { method: 'GET' }, {})
 }
 
+// Intent to click: the pointer rests on a link for a moment, or a finger
+// touches it, or the keyboard focuses it.
+function prefetchable(target) {
+  const a = target instanceof Element ? target.closest('a[href]') : null
+  if (!a || a.hasAttribute('download') || a.hasAttribute('data-no-swap') || (a.getAttribute('target') || '_self') !== '_self') return null
+  const url = new URL(a.href, location.href)
+  if (url.origin !== location.origin || !/^https?:$/.test(url.protocol) || !swappablePath(url) || sameDocument(url)) return null
+  return url
+}
+
+let hoverTimer
+function onIntent(event) {
+  const url = prefetchable(event.target)
+  if (!url) return
+  window.clearTimeout(hoverTimer)
+  if (event.type === 'mouseover') hoverTimer = window.setTimeout(() => prefetch(url), 65)
+  else prefetch(url)
+}
+
 function onSubmit(event) {
   if (event.defaultPrevented) return
   const form = event.target
@@ -286,6 +370,10 @@ export function startNav() {
   // form) run first and may take the event (defaultPrevented).
   document.addEventListener('click', onClick)
   document.addEventListener('submit', onSubmit)
+  document.addEventListener('mouseover', onIntent, { passive: true })
+  document.addEventListener('touchstart', onIntent, { passive: true })
+  document.addEventListener('focusin', onIntent)
+  document.addEventListener('mouseout', () => window.clearTimeout(hoverTimer), { passive: true })
   window.addEventListener('popstate', onPop)
   window.addEventListener('pagehide', saveScroll)
   runPage()
