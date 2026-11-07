@@ -156,7 +156,7 @@ templ OrderForm(p Page, f OrderFormData) {
 			</div>
 			if f.TurnstileSiteKey != "" {
 				<div class="cf-turnstile mt-4" data-sitekey={ f.TurnstileSiteKey }></div>
-				<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer nonce={ p.Nonce }></script>
+				<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer nonce={ p.Nonce } data-nav-reload></script>
 			}
 			<div data-duplicate role="alert" hidden?={ f.Duplicate == "" } class="mt-6 rounded-2xl bg-oil-soft/60 p-4">
 				<p class="font-semibold">{ p.T(i18n.OrderFormDuplicateTitle) }</p>

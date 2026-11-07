@@ -52,31 +52,43 @@ func (h *Handlers) SecurityPage(w http.ResponseWriter, r *http.Request, cur *aut
 	h.renderSecurity(w, r, cur, http.StatusOK, nil)
 }
 
+// checkPassword verifies the signed-in admin's own password, rate limited
+// like sign-in (limited reports the limit is reached); a failure is counted
+// and audited. The caller marks the session on success.
+func (h *Handlers) checkPassword(ctx context.Context, r *http.Request, cur *auth.Current, pw string) (ok, limited bool, err error) {
+	key := "password:admin:" + cur.Admin.ID.String()
+	n, err := h.Limiter.Count(ctx, key, loginWindow)
+	if err != nil {
+		return false, false, err
+	}
+	limited = n >= loginMaxPerEmail
+	if !limited && len(pw) <= auth.MaxPasswordLength {
+		ok, _ = auth.VerifyPassword(cur.Admin.PasswordHash, pw)
+	}
+	if !ok {
+		_, _ = h.Limiter.Hit(ctx, key, loginWindow)
+		h.audit(ctx, r, &cur.Admin.ID, "auth.reauth_failed", "admin", cur.Admin.ID.String(), nil)
+	}
+	return ok, limited, nil
+}
+
 // Reauth confirms the password before 2FA changes (valid 10 minutes).
 func (h *Handlers) Reauth(w http.ResponseWriter, r *http.Request, cur *auth.Current) {
 	ctx := r.Context()
-	key := "password:admin:" + cur.Admin.ID.String()
-	n, err := h.Limiter.Count(ctx, key, loginWindow)
+	ok, limited, err := h.checkPassword(ctx, r, cur, r.PostFormValue("password"))
 	if err != nil {
 		h.serverError(w, r, err)
 		return
 	}
-	pw := r.PostFormValue("password")
-	ok := false
-	if n < loginMaxPerEmail && len(pw) <= auth.MaxPasswordLength {
-		ok, _ = auth.VerifyPassword(cur.Admin.PasswordHash, pw)
-	}
 	next := safeNext(r.PostFormValue("next"))
 	if !ok {
-		_, _ = h.Limiter.Hit(ctx, key, loginWindow)
-		h.audit(ctx, r, &cur.Admin.ID, "auth.reauth_failed", "admin", cur.Admin.ID.String(), nil)
 		if next != "" {
 			// Back to the page that asked, which shows the prompt with the error.
 			http.Redirect(w, r, withQuery(next, "reauth", "failed"), http.StatusSeeOther) //nolint:gosec // G710: next passed safeNext
 			return
 		}
 		msg := i18n.AdminPasswordWrongCurrent
-		if n >= loginMaxPerEmail {
+		if limited {
 			msg = i18n.AdminLoginRateLimited
 		}
 		h.renderSecurity(w, r, cur, http.StatusUnauthorized, func(p *view.AdminPage, d *view.SecurityData) { d.Error = p.T(msg) })

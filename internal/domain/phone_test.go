@@ -57,3 +57,21 @@ func FuzzNormalizePhone(f *testing.F) {
 		}
 	})
 }
+
+func TestNormalizeContactPhone(t *testing.T) {
+	for in, want := range map[string]string{
+		"0524 11 22 33":      "+212524112233",
+		"+212 6 61 08 50 09": "+212661085009",
+		"+39 388 188 48 56":  "+393881884856",
+		"0039 388 188 4856":  "+393881884856",
+	} {
+		if got, ok := NormalizeContactPhone(in); !ok || got != want {
+			t.Errorf("%q: %q %v, want %q", in, got, ok, want)
+		}
+	}
+	for _, in := range []string{"", "388 188 48 56", "+12", "+39 388 188 48 56 77 88 99", "call me"} {
+		if got, ok := NormalizeContactPhone(in); ok {
+			t.Errorf("%q accepted as %q", in, got)
+		}
+	}
+}

@@ -214,16 +214,31 @@ func TestAdminSettings(t *testing.T) {
 	if _, err := e.s.Pool.Exec(context.Background(), "update sessions set recent_auth_at = now() - interval '11 minutes'"); err != nil {
 		t.Fatal(err)
 	}
+	// The password is asked in the contact form itself: without it, or with
+	// a wrong one, nothing is saved and the typed number stays in the form.
 	rec := b.post("/admin/settings/contact", contact)
-	if rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), `action="/admin/security/reauth"`) {
+	if rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), `id="contact-password"`) || !strings.Contains(rec.Body.String(), "06 12 34 56 78") {
 		t.Fatalf("contact without recent auth: %d", rec.Code)
 	}
-	rec = b.post("/admin/security/reauth", url.Values{"password": {ownerPassword}, "next": {"/admin/settings#contact"}})
-	if location(rec) != "/admin/settings#contact" {
-		t.Fatalf("reauth next: %s", location(rec))
+	withPw := func(pw string) url.Values {
+		v := url.Values{"password": {pw}}
+		for k, vals := range contact {
+			v[k] = vals
+		}
+		return v
 	}
-	if rec := b.post("/admin/settings/contact", contact); rec.Code != http.StatusSeeOther {
-		t.Fatalf("contact: %d %s", rec.Code, rec.Body.String())
+	rec = b.post("/admin/settings/contact", withPw("not the password"))
+	if rec.Code != http.StatusUnprocessableEntity || strings.Contains(rec.Body.String(), "not the password") {
+		t.Fatalf("contact with a wrong password: %d", rec.Code)
+	}
+	if strings.Contains(get(t, e.h, "/fr").Body.String(), "wa.me/212612345678") {
+		t.Fatal("saved with a wrong password")
+	}
+	if rec := b.post("/admin/settings/contact", withPw(ownerPassword)); rec.Code != http.StatusSeeOther {
+		t.Fatalf("contact with the password: %d %s", rec.Code, rec.Body.String())
+	}
+	if e.scalar("select count(*)::text from audit_logs where action = 'auth.reauth_failed'") != "1" {
+		t.Fatal("wrong password not audited once")
 	}
 	if !strings.Contains(get(t, e.h, "/fr").Body.String(), "wa.me/212612345678") {
 		t.Fatal("new WhatsApp number not on the site")

@@ -7,8 +7,11 @@
 //
 // A full load happens instead whenever a swap could be wrong: another part of
 // the site (admin and public pages load different scripts or styles), a page
-// that carries its own <script> in the body (Turnstile), a response that is
-// not HTML (CSV export), or any network or parsing failure.
+// whose body carries a script of ours marked data-nav-reload (Turnstile), a
+// response that is not HTML (CSV export), or any network or parsing failure.
+// Scripts a host or proxy injects (Cloudflare Web Analytics adds one to the
+// end of every page) are not ours and never force a reload: only our own
+// /static/ files and marked scripts count.
 //
 // Page code registers with onPage(fn): fn(signal) runs on the first load and
 // after every swap; signal aborts when the page is left, so listeners on
@@ -84,10 +87,13 @@ function takePrefetched(url) {
   return hit && Date.now() - hit.at < PREFETCH_TTL ? hit.page : null
 }
 
-// Assets that define a "part" of the site: if they differ, swap is unsafe.
+// Our own files that define a "part" of the site: if they differ, swap is
+// unsafe. Files from elsewhere (a host's analytics) are left out.
 const assetKey = (doc) =>
-  [...doc.querySelectorAll('head link[rel="stylesheet"], head script[src]')]
-    .map((el) => el.getAttribute('href') || el.getAttribute('src'))
+  [...doc.querySelectorAll('link[rel="stylesheet"][href], script[src]')]
+    .map((el) => new URL(el.getAttribute('href') || el.getAttribute('src'), location.href))
+    .filter((u) => u.origin === location.origin && u.pathname.startsWith('/static/'))
+    .map((u) => u.pathname)
     .sort()
     .join('|')
 
@@ -184,7 +190,7 @@ async function load(url, init, { replace = false, keepScroll = false, form, subm
   if (url.hash && !finalURL.hash) finalURL.hash = url.hash
   const doc = new DOMParser().parseFromString(html, 'text/html')
   const otherAssets = assetKey(doc) !== assetKey(document)
-  if (otherAssets || doc.body.querySelector('script:not([type="application/ld+json"])')) {
+  if (otherAssets || doc.body.querySelector('script[data-nav-reload]')) {
     // Another part of the site, or a page with its own scripts: load it
     // fully. A POST is never sent twice: show where it led (or reload).
     doneProgress()

@@ -112,7 +112,7 @@ func (h *Handlers) SaveSettings(w http.ResponseWriter, r *http.Request, cur *aut
 		ct := cur2.Contact
 		if raw := strings.TrimSpace(r.PostFormValue("phone")); raw == "" {
 			ct.Phones = nil
-		} else if e164, ok := domain.NormalizeMoroccanPhone(raw); ok {
+		} else if e164, ok := domain.NormalizeContactPhone(raw); ok {
 			ct.Phones = append([]string{e164}, without(cur2.Contact.Phones, e164, 1)...)
 		} else {
 			f.fail("phone", i18n.AdminSettingsInvalid)
@@ -128,9 +128,30 @@ func (h *Handlers) SaveSettings(w http.ResponseWriter, r *http.Request, cur *aut
 		ct.Socials.Instagram = f.httpsURL("instagram", "")
 		ct.Socials.TikTok = f.httpsURL("tiktok", "")
 		ct.Socials.YouTube = f.httpsURL("youtube", "")
+		// Changing the numbers needs a password check within 10 minutes. The
+		// password field sits in this form, so one save checks and stores.
 		numbersChanged := wa.Number != cur2.WhatsApp.Number || firstOf(ct.Phones) != firstOf(cur2.Contact.Phones)
 		if f.ok() && numbersChanged && !cur.RecentAuth(h.Now()) {
-			f.fail("form", i18n.AdminCommonReauthFirst)
+			pw := r.PostFormValue("password")
+			if pw == "" {
+				f.fail("password", i18n.AdminCommonReauthFirst)
+				break
+			}
+			ok, limited, err := h.checkPassword(ctx, r, cur, pw)
+			switch {
+			case err != nil:
+				h.serverError(w, r, err)
+				return
+			case limited:
+				f.fail("password", i18n.AdminLoginRateLimited)
+			case !ok:
+				f.fail("password", i18n.AdminPasswordWrongCurrent)
+			default:
+				if err := h.Store.Q.MarkSessionRecentAuth(ctx, cur.Session.ID); err != nil {
+					h.serverError(w, r, err)
+					return
+				}
+			}
 		}
 		changes = []change{{"whatsapp", cur2.WhatsApp, wa}, {"contact", cur2.Contact, ct}}
 	case "delivery":

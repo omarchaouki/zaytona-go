@@ -47,6 +47,7 @@ var allowedFields = map[string][]string{
 		"orderAr", "orderFr", "customerAr", "customerFr", "greetingAr", "greetingFr",
 		"webhook", "showReviews", "showGallery", "showCounters",
 		"pixelEnabled", "pixelId", "requireConsent",
+		"password", "username", // contact: password check before a number change
 	},
 
 	"POST /admin/certificates":             certFields,

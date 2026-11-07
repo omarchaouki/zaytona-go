@@ -42,3 +42,21 @@ func FormatPhoneDisplay(e164 string) string {
 	l := "0" + e164[4:]
 	return l[0:2] + " " + l[2:4] + " " + l[4:6] + " " + l[6:8] + " " + l[8:10]
 }
+
+// NormalizeContactPhone is the mill's own contact phone: a Moroccan number
+// as NormalizeMoroccanPhone reads it, or an international one written with
+// its country code ("+39 388 188 48 56", "0039..."), as E.164.
+func NormalizeContactPhone(input string) (string, bool) {
+	if e164, ok := NormalizeMoroccanPhone(input); ok {
+		return e164, true
+	}
+	s := strings.TrimSpace(input)
+	if !strings.HasPrefix(s, "+") && !strings.HasPrefix(s, "00") {
+		return "", false
+	}
+	n, ok := NormalizeWhatsAppNumber(s)
+	if !ok {
+		return "", false
+	}
+	return "+" + n, true
+}

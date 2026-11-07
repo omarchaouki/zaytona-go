@@ -76,11 +76,6 @@ templ AdminSettings(p AdminPage, d SettingsData) {
 				@identityForm(p, d, d.Form.For("identity"))
 			}
 			@settingsSection("contact", p.T(i18n.AdminSettingsContactTitle), WhatsAppIcon("size-5 text-whatsapp-deep")) {
-				if d.NeedsReauth && p.Owner {
-					<div class="mb-g2">
-						@ReauthCard(p, "/admin/settings#contact", d.ReauthError)
-					</div>
-				}
 				@contactForm(p, d, d.Form.For("contact"))
 			}
 			@settingsSection("delivery", p.T(i18n.AdminDeliveryTitle), IconTruck("size-5 text-olive-600")) {
@@ -152,6 +147,17 @@ templ contactForm(p AdminPage, d SettingsData, s *FormState) {
 		@Input("contact", Field{Name: "instagram", Label: "Instagram", Type: "url", Dir: "ltr", Max: 500}, d.S.Contact.Socials.Instagram, s)
 		@Input("contact", Field{Name: "tiktok", Label: "TikTok", Type: "url", Dir: "ltr", Max: 500}, d.S.Contact.Socials.TikTok, s)
 		@Input("contact", Field{Name: "youtube", Label: "YouTube", Type: "url", Dir: "ltr", Max: 500}, d.S.Contact.Socials.YouTube, s)
+		if d.NeedsReauth && p.Owner {
+			// Asked in this form (never echoed back): a change of the WhatsApp
+			// number or the phone is checked and saved in one step.
+			<div class="rounded-card bg-oil-soft/50 p-g2 sm:col-span-2">
+				<input type="email" name="username" autocomplete="username" value={ p.Email } readonly hidden/>
+				@fieldLabel("contact-password", p.T(i18n.AdminLoginPassword))
+				<p id="contact-password-hint" class="mt-1 text-sm text-ink">{ p.T(i18n.AdminCommonReauthFirst) }</p>
+				<input id="contact-password" name="password" type="password" autocomplete="current-password" dir="ltr" maxlength="128" aria-describedby="contact-password-hint" class="field-input mt-2"/>
+				@formError(s.E("password"))
+			</div>
+		}
 		<div class="space-y-2 sm:col-span-2">
 			@SaveRow(p, p.T(i18n.AdminSettingsSave), s.E("form"), "")
 		</div>

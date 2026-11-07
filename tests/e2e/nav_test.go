@@ -56,6 +56,36 @@ func TestInPlaceNavigationPublic(t *testing.T) {
 	}
 }
 
+// A host or proxy that injects its own script into every page (Cloudflare
+// Web Analytics adds a beacon at the end of the body) must not turn each
+// click into a full reload. The fetch the navigation uses is wrapped to add
+// such a script to every HTML response.
+func TestInPlaceNavigationWithInjectedScript(t *testing.T) {
+	ctx := browser(t)
+	run(t, ctx, phone(ctx), chromedp.Navigate(base()+"/fr"), chromedp.WaitVisible(chromedp.CSS(`[data-order-form][data-enhanced]`)))
+	_ = eval[int](t, ctx, `(() => {
+		const plain = window.fetch
+		window.fetch = async (...args) => {
+			const res = await plain(...args)
+			if (!(res.headers.get('Content-Type') || '').includes('text/html')) return res
+			const html = (await res.text()).replace('</body>', '<script defer src="https://static.example.invalid/beacon.min.js"></script></body>')
+			return new Response(html, { status: res.status, headers: res.headers })
+		}
+		return 0
+	})()`)
+	_ = eval[int](t, ctx, setMarker)
+	run(t, ctx, tap(`footer a[href="/fr/privacy"]`))
+	waitFor(t, ctx, `location.pathname === '/fr/privacy' && !!document.querySelector('main h1')`)
+	if !eval[bool](t, ctx, markerKept) {
+		t.Fatal("an injected script made the privacy page a full reload")
+	}
+	run(t, ctx, tap(`footer a[href="/fr/terms"]`))
+	waitFor(t, ctx, `location.pathname === '/fr/terms'`)
+	if !eval[bool](t, ctx, markerKept) {
+		t.Fatal("an injected script made the terms page a full reload")
+	}
+}
+
 // The admin changes in place too: signing in (a form post), the order list,
 // and a page whose form is refused keeps its address.
 func TestInPlaceNavigationAdmin(t *testing.T) {
