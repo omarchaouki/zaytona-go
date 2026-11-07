@@ -9,15 +9,15 @@
     "width": 1179,
     "height": 682
   },
-  "coop-logo": {
-    "widths": [480, 720],
-    "width": 720,
-    "height": 1280
+  "grove-panorama": {
+    "widths": [480, 960, 1600, 1920],
+    "width": 1920,
+    "height": 650
   },
-  "mill-bottles": {
-    "widths": [480, 960, 1280],
-    "width": 1280,
-    "height": 960
+  "grove-path": {
+    "widths": [480, 960, 1600],
+    "width": 1600,
+    "height": 1066
   },
   "mill-team": {
     "widths": [480, 960, 1280],
@@ -34,10 +34,15 @@
     "width": 1280,
     "height": 960
   },
-  "olives-crates": {
-    "widths": [480, 720],
-    "width": 720,
-    "height": 1280
+  "olives-golden-hour": {
+    "widths": [480, 960, 1600],
+    "width": 1600,
+    "height": 900
+  },
+  "olives-harvest": {
+    "widths": [480, 750],
+    "width": 750,
+    "height": 1029
   },
   "olives-pile": {
     "widths": [480, 720],

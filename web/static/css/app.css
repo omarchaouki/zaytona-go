@@ -124,6 +124,7 @@
   --text-step-small: clamp(0.8125rem, 0.79rem + 0.1vw, 0.875rem);
   --text-step-body: clamp(1.0625rem, 1rem + 0.25vw, 1.1875rem);
   --text-step-lead: clamp(1.25rem, 1.1rem + 0.7vw, 1.625rem);
+  --text-step-sub: clamp(1.75rem, 1.4rem + 1.4vw, 2.75rem);
   --text-step-head: clamp(2rem, 1.3rem + 3.2vw, 4rem);
   --text-step-figure: clamp(3rem, 1.4rem + 6.4vw, 7.5rem);
 
@@ -502,6 +503,11 @@
   font-size: calc(var(--text-step-head) * var(--heading-scale));
   line-height: var(--leading-heading);
 }
+@utility text-step-sub {
+  font-size: var(--text-step-sub);
+  line-height: 1.05;
+  letter-spacing: var(--heading-tracking);
+}
 @utility text-step-figure {
   font-size: calc(var(--text-step-figure) * var(--heading-scale));
   line-height: 0.95;
@@ -781,26 +787,24 @@
     clip-path: polygon(0 0, 100% 0, 100% 100%, 98.75% calc(100% - 8px), 97.5% 100%, 96.25% calc(100% - 8px), 95% 100%, 93.75% calc(100% - 8px), 92.5% 100%, 91.25% calc(100% - 8px), 90% 100%, 88.75% calc(100% - 8px), 87.5% 100%, 86.25% calc(100% - 8px), 85% 100%, 83.75% calc(100% - 8px), 82.5% 100%, 81.25% calc(100% - 8px), 80% 100%, 78.75% calc(100% - 8px), 77.5% 100%, 76.25% calc(100% - 8px), 75% 100%, 73.75% calc(100% - 8px), 72.5% 100%, 71.25% calc(100% - 8px), 70% 100%, 68.75% calc(100% - 8px), 67.5% 100%, 66.25% calc(100% - 8px), 65% 100%, 63.75% calc(100% - 8px), 62.5% 100%, 61.25% calc(100% - 8px), 60% 100%, 58.75% calc(100% - 8px), 57.5% 100%, 56.25% calc(100% - 8px), 55% 100%, 53.75% calc(100% - 8px), 52.5% 100%, 51.25% calc(100% - 8px), 50% 100%, 48.75% calc(100% - 8px), 47.5% 100%, 46.25% calc(100% - 8px), 45% 100%, 43.75% calc(100% - 8px), 42.5% 100%, 41.25% calc(100% - 8px), 40% 100%, 38.75% calc(100% - 8px), 37.5% 100%, 36.25% calc(100% - 8px), 35% 100%, 33.75% calc(100% - 8px), 32.5% 100%, 31.25% calc(100% - 8px), 30% 100%, 28.75% calc(100% - 8px), 27.5% 100%, 26.25% calc(100% - 8px), 25% 100%, 23.75% calc(100% - 8px), 22.5% 100%, 21.25% calc(100% - 8px), 20% 100%, 18.75% calc(100% - 8px), 17.5% 100%, 16.25% calc(100% - 8px), 15% 100%, 13.75% calc(100% - 8px), 12.5% 100%, 11.25% calc(100% - 8px), 10% 100%, 8.75% calc(100% - 8px), 7.5% 100%, 6.25% calc(100% - 8px), 5% 100%, 3.75% calc(100% - 8px), 2.5% 100%, 1.25% calc(100% - 8px), 0% 100%);
   }
 
-  /* Offer cards lift a little on hover and their photo zooms. */
-  .offer-card {
-    transition:
-      transform 300ms var(--ease-out-soft),
-      box-shadow 300ms var(--ease-out-soft);
+  /* Products: a row steps up a tone when pointed at and the group photo
+     zooms a little. */
+  .offer-row {
+    transition: background-color 300ms var(--ease-out-soft);
   }
-  .offer-card:hover {
-    transform: translateY(-4px);
-    box-shadow: var(--shadow-float); /* taste-skill-ignore: lifted only while pointed at */
+  .offer-row:hover {
+    background-color: color-mix(in oklab, var(--color-paper) 75%, var(--color-sand));
   }
-  .offer-card .offer-photo img {
-    transition: transform 600ms var(--ease-out-soft);
+  .offer-group .offer-photo img {
+    transition: transform 700ms var(--ease-out-soft);
   }
-  .offer-card:hover .offer-photo img {
-    transform: scale(1.05);
+  .offer-group:hover .offer-photo img {
+    transform: scale(1.04);
   }
-  .offer-out .offer-photo {
-    opacity: 0.6;
-    filter: grayscale(0.4);
+  .offer-out .offer-row-text {
+    opacity: 0.55;
   }
+
 
   /* The mill's name, large and quiet behind the last line of the footer;
      sized to the width so it never runs off the screen. */
@@ -810,20 +814,6 @@
   }
   :lang(ar) .footer-name {
     font-size: clamp(2.25rem, 7vw, 7.5rem);
-  }
-
-  /* The path joining the three order steps, behind their pictures. */
-  @media (width >= 64rem) {
-    .how-path::before {
-      content: "";
-      position: absolute;
-      inset-inline: 12%;
-      top: 3.5rem;
-      border-top: 2px dashed color-mix(in oklab, var(--color-olive-400) 45%, transparent);
-    }
-    .how-path > li {
-      background: color-mix(in oklab, var(--color-olive-900) 92%, transparent);
-    }
   }
 
   /* Litre gauge: the drawn bidon fills to the chosen litres (--fill, 0 to 1,

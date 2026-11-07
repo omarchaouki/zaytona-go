@@ -12,8 +12,10 @@ type LandingData struct {
 
 	Offers []OfferCard // oil by the litre
 	Jars   []OfferCard // jars (amlou...), shown after the oil
-	Tiers  []string    // volume prices, "From 30 L: 85 MAD a litre"
-	Custom *CustomCard
+	// One photograph per group, beside its sizes: the labelled bottle, the jar.
+	OilImage, JarImage Image
+	Tiers              []string // volume prices, "From 30 L: 85 MAD a litre"
+	Custom             *CustomCard
 
 	ONSSA      *Certificate
 	OtherCerts []Certificate
@@ -57,6 +59,7 @@ type OfferCard struct {
 	OrderLabel                     string // accessible name of the order link
 	Jar                            bool   // sold by the jar (SizeLabel in grams)
 	TierPrice                      bool   // automatic price at a volume tier
+	OwnPhoto                       bool   // Image is the offer's own upload (shown in its row)
 }
 
 // CustomCard is the "other quantity" offer and the litre gauge: PerLiterRaw

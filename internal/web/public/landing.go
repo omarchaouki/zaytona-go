@@ -69,6 +69,7 @@ func (h *Handlers) buildLanding(p view.Page, d *store.SiteData) view.LandingData
 
 	// Offers (oil by the litre, then jars) and the price anchor (cheapest oil in stock).
 	oilImg, jarImg := view.StaticImage(p.Asset, offerImage), view.StaticImage(p.Asset, jarImage)
+	out.OilImage, out.JarImage = oilImg, jarImg
 	unit := t(i18n.OrderFormLitersUnit)
 	firstTier := 0
 	if tiers := s.Pricing.SortedTiers(); len(tiers) > 0 {
@@ -101,6 +102,7 @@ func (h *Handlers) buildLanding(p view.Page, d *store.SiteData) view.LandingData
 		}
 		if o.ImageID != nil && o.ImageWidth != nil && o.ImageHeight != nil {
 			card.Image = view.MediaImage(*o.ImageID, ints(o.ImageWidths), int(*o.ImageWidth), int(*o.ImageHeight))
+			card.OwnPhoto = true
 		}
 		if jar {
 			out.Jars = append(out.Jars, card)

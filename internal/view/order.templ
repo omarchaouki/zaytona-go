@@ -224,9 +224,9 @@ templ jarChoices(p Page, f OrderFormData) {
 						<span class="text-sm font-medium text-danger">{ p.T(i18n.OrderFormUnavailable) }</span>
 					} else {
 						<div class="flex items-center gap-1.5" dir="ltr">
-							<button type="button" data-qty-step="-1" data-for={ "qty-" + j.Slug } aria-label={ p.T(i18n.OrderFormLess, "name", j.Name) } class="js-only tap items-center justify-center rounded-full bg-sand text-xl font-bold hover:bg-sand-deep/60">−</button>
+							<button type="button" data-qty-step="-1" data-for={ "qty-" + j.Slug } aria-label={ p.T(i18n.OrderFormLess, "name", j.Name) } class="js-only tap items-center justify-center rounded-full bg-sand text-step-lead font-bold hover:bg-sand-deep/60">−</button>
 							<input id={ "qty-" + j.Slug } name={ j.QtyName() } type="number" inputmode="numeric" min="0" max="50" step="1" value={ j.Qty } placeholder="0" data-jar-qty data-slug={ j.Slug } data-price={ j.PriceRaw } data-label={ j.Name + " " + j.SizeLabel } class="field-input w-[7.5rem] text-center text-lg font-semibold tabular-nums"/>
-							<button type="button" data-qty-step="1" data-for={ "qty-" + j.Slug } aria-label={ p.T(i18n.OrderFormMore, "name", j.Name) } class="js-only tap items-center justify-center rounded-full bg-sand text-xl font-bold hover:bg-sand-deep/60">+</button>
+							<button type="button" data-qty-step="1" data-for={ "qty-" + j.Slug } aria-label={ p.T(i18n.OrderFormMore, "name", j.Name) } class="js-only tap items-center justify-center rounded-full bg-sand text-step-lead font-bold hover:bg-sand-deep/60">+</button>
 						</div>
 					}
 				</li>
@@ -302,8 +302,8 @@ templ OrderSection(p Page, f OrderFormData) {
 			<div data-reveal class="stagger-10 lg:col-start-2 lg:row-span-2 lg:row-start-2">
 				@OrderForm(p, f)
 			</div>
-			if p.WAHref("") != "" || p.FirstPhone() != "" {
-				<div class="lg:col-start-1 lg:row-start-3 lg:pt-12">
+			<div class="lg:col-start-1 lg:row-start-3 lg:pt-12">
+				if p.WAHref("") != "" || p.FirstPhone() != "" {
 					<p class="font-semibold">{ p.T(i18n.OrderAltTitle) }</p>
 					<ul class="mt-2">
 						if p.WAHref("") != "" {
@@ -323,8 +323,13 @@ templ OrderSection(p Page, f OrderFormData) {
 							</li>
 						}
 					</ul>
-				</div>
-			}
+				}
+				// The left column stays short beside the long form on desktop:
+				// olives just picked fill it (decorative, desktop only).
+				<figure data-reveal class="stagger-20 rounded-img mt-12 hidden aspect-[4/5] bg-olive-900 lg:block">
+					@Picture(StaticImage(p.Asset, "olives-harvest"), "", "30vw", false, "drift block h-full w-full", "pos-50-50")
+				</figure>
+			</div>
 		</div>
 	</section>
 }

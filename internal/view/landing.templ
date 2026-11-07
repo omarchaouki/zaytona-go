@@ -29,7 +29,7 @@ templ Landing(p Page, d LandingData, f OrderFormData) {
 			@Stage([]StageShot{
 				{Key: "hero", Image: d.HeroImage, Pos: "pos-50-40"},
 				{Key: "harvest", Image: StaticImage(p.Asset, "olives-pile"), Alt: p.T(i18n.HeroImageAlt), Pos: "pos-50-40"},
-				{Key: "grove", Image: StaticImage(p.Asset, "olives-crates"), Pos: "pos-50-60"},
+				{Key: "grove", Image: StaticImage(p.Asset, "grove-path"), Pos: "pos-50-60"},
 			}, d.HeroEyebrow)
 			<div class="reading">
 				@Hero(p, d)
@@ -107,13 +107,9 @@ templ Offers(p Page, d LandingData) {
 				if len(d.Jars) > 0 {
 					<h3 data-reveal class="mt-12 text-step-lead">{ p.T(i18n.ProductsOilTitle) }</h3>
 				}
-				<ul class={ "grid gap-4 sm:grid-cols-2 xl:grid-cols-3", templ.KV("mt-5", len(d.Jars) > 0), templ.KV("mt-12", len(d.Jars) == 0) }>
-					for i, o := range d.Offers {
-						<li data-reveal class={ staggerClass(float64(i) * 0.08) }>
-							@offerCard(p, o)
-						</li>
-					}
-				</ul>
+				<div class={ templ.KV("mt-5", len(d.Jars) > 0), templ.KV("mt-12", len(d.Jars) == 0) }>
+					@productGroup(p, d.OilImage, d.Offers)
+				</div>
 			}
 			if len(d.Tiers) > 0 {
 				<div data-reveal class="olive-texture-dark mt-4 flex flex-wrap items-center gap-x-6 gap-y-3 rounded-3xl bg-olive-700 px-6 py-5 text-limewash">
@@ -137,13 +133,9 @@ templ Offers(p Page, d LandingData) {
 			}
 			if len(d.Jars) > 0 {
 				<h3 data-reveal class="mt-14 text-step-lead">{ p.T(i18n.ProductsJarsTitle) }</h3>
-				<ul class="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-					for i, o := range d.Jars {
-						<li data-reveal class={ staggerClass(float64(i) * 0.08) }>
-							@offerCard(p, o)
-						</li>
-					}
-				</ul>
+				<div class="mt-5">
+					@productGroup(p, d.JarImage, d.Jars)
+				</div>
 			}
 		}
 		if p.WAHref("") != "" {
@@ -157,53 +149,80 @@ templ Offers(p Page, d LandingData) {
 	</section>
 }
 
-const offerPhotoSizes = "(min-width: 80rem) 15rem, (min-width: 40rem) 40vw, 90vw"
+const offerPhotoSizes = "(min-width: 80rem) 18rem, (min-width: 64rem) 22vw, (min-width: 40rem) 40vw, 92vw"
 
-// offerCard: the product as it is sold (the mill's labelled bottle, or the
-// jar), its size on the photo, then the price and one order button. A real
-// link to #order (works before JS); landing.js also selects it in the form.
-templ offerCard(p Page, o OfferCard) {
-	<article class={ "offer-card flex h-full flex-col overflow-hidden rounded-3xl bg-paper", templ.KV("offer-out", o.OutOfStock) }>
-		<div class="relative aspect-[4/5] overflow-hidden bg-olive-900">
-			@Picture(o.Image, o.ImageAlt, offerPhotoSizes, false, "offer-photo block h-full w-full", "")
-			<p class="absolute start-3 top-3 rounded-full bg-olive-950/85 px-3.5 py-1 text-step-lead font-semibold text-limewash tabular-nums">{ offerTitle(o) }</p>
-			if o.TierPrice && !o.OutOfStock {
-				<span class="absolute end-3 top-3 rounded-full bg-oil-bright px-3 py-1 text-step-small font-semibold text-olive-950">{ p.T(i18n.ProductsTierBadge) }</span>
+// productGroup: the product as it is sold, photographed once (the mill's
+// labelled bottle, or the jar), beside its sizes set as rows in large type.
+// Side by side once the column is wide enough (container query), stacked on
+// a phone. A size with its own photo from Admin > Offres shows it in its row.
+templ productGroup(p Page, photo Image, offers []OfferCard) {
+	<div class="offer-group @container">
+		<div class="grid gap-3 @xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+			<figure data-reveal class={ "rounded-img relative aspect-[4/3] bg-olive-900 @xl:aspect-auto", templ.KV("@xl:min-h-[22rem]", len(offers) > 1), templ.KV("@xl:min-h-[11rem]", len(offers) == 1) }>
+				@Picture(photo, "", offerPhotoSizes, false, "offer-photo absolute inset-0 block", "pos-50-40")
+			</figure>
+			<ul class="grid content-start gap-3">
+				for i, o := range offers {
+					<li data-reveal class={ staggerClass(float64(i) * 0.08) }>
+						@offerRow(p, o)
+					</li>
+				}
+			</ul>
+		</div>
+	</div>
+}
+
+// offerRow: the size set large with its order button beside it, then the
+// price. A real link to #order (works before JS); landing.js also selects it
+// in the form.
+templ offerRow(p Page, o OfferCard) {
+	<article class={ "offer-row rounded-3xl bg-paper p-4 sm:p-5", templ.KV("offer-out", o.OutOfStock) }>
+		<div class="flex items-center gap-4">
+			if o.OwnPhoto {
+				<div class="rounded-img offer-row-text size-14 shrink-0 bg-olive-900">
+					@Picture(o.Image, o.ImageAlt, "3.5rem", false, "block h-full w-full", "")
+				</div>
+			}
+			<p class="offer-row-text min-w-0 flex-1 text-step-sub font-semibold tabular-nums">{ offerTitle(o) }</p>
+			if o.OutOfStock {
+				@WALink(p, "product_unavailable", "", btn("md", "whitespace-normal")+" btn-press inline-flex shrink-0 bg-sand text-center text-ink hover:bg-sand-deep/70", "") {
+					@WhatsAppIcon("text-whatsapp-deep")
+					{ p.T(i18n.ProductsOutOfStockAsk) }
+				}
+			} else if o.Jar {
+				<a href={ templ.SafeURL("?jar=" + o.Slug + "#order") } data-jar={ o.Slug } aria-label={ o.OrderLabel } class={ btn("md"), actPrimary, "shrink-0" }>
+					{ p.T(i18n.ProductsOrderShort) }
+					@IconArrowForward("")
+				</a>
+			} else {
+				<a href={ templ.SafeURL("?offer=" + o.Slug + "#order") } data-offer={ o.Slug } aria-label={ o.OrderLabel } class={ btn("md"), actPrimary, "shrink-0" }>
+					{ p.T(i18n.ProductsOrderShort) }
+					@IconArrowForward("")
+				</a>
+			}
+		</div>
+		<div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+			<p class="offer-row-text text-step-lead font-semibold tabular-nums">{ o.Price }</p>
+			if o.PerLiter != "" {
+				<p class="offer-row-text text-step-small text-olive tabular-nums">{ p.T(i18n.ProductsPerLiter, "price", o.PerLiter) }</p>
 			}
 			if o.OutOfStock {
-				<span class="absolute start-3 bottom-3 rounded-full bg-limewash px-3 py-1 text-step-small font-semibold text-danger">{ p.T(i18n.ProductsOutOfStock) }</span>
-			} else if o.LowStock {
-				<span class="absolute start-3 bottom-3 rounded-full bg-oil-bright px-3 py-1 text-step-small font-semibold text-olive-950">{ p.T(i18n.ProductsLowStock) }</span>
-			}
-		</div>
-		<div class="flex flex-1 flex-col px-5 pt-4 pb-5">
-			<h3 class="text-step-small font-medium text-ink-soft">{ o.Name }</h3>
-			<p class="mt-1 text-step-lead font-semibold tabular-nums">{ o.Price }</p>
-			if o.PerLiter != "" {
-				<p class="text-step-small text-olive tabular-nums">{ p.T(i18n.ProductsPerLiter, "price", o.PerLiter) }</p>
-			}
-			if o.Tagline != "" {
-				<p class="mt-3 text-step-small text-ink-soft">{ o.Tagline }</p>
-			}
-			<div class="mt-auto pt-5">
-				if o.OutOfStock {
-					@WALink(p, "product_unavailable", "", btn("md", "whitespace-normal")+" btn-press inline-flex w-full bg-sand text-center text-ink hover:bg-sand-deep/70", "") {
-						@WhatsAppIcon("text-whatsapp-deep")
-						{ p.T(i18n.ProductsOutOfStockAsk) }
-					}
-				} else if o.Jar {
-					<a href={ templ.SafeURL("?jar=" + o.Slug + "#order") } data-jar={ o.Slug } aria-label={ o.OrderLabel } class={ btn("md"), actPrimary, "w-full" }>
-						{ p.T(i18n.ProductsOrderShort) }
-						@IconArrowForward("")
-					</a>
-				} else {
-					<a href={ templ.SafeURL("?offer=" + o.Slug + "#order") } data-offer={ o.Slug } aria-label={ o.OrderLabel } class={ btn("md"), actPrimary, "w-full" }>
-						{ p.T(i18n.ProductsOrderShort) }
-						@IconArrowForward("")
-					</a>
+				<span class="rounded-full bg-limewash px-3 py-1 text-step-small font-semibold text-danger">{ p.T(i18n.ProductsOutOfStock) }</span>
+			} else {
+				if o.TierPrice {
+					<span class="rounded-full bg-oil-bright px-3 py-1 text-step-small font-semibold text-olive-950">{ p.T(i18n.ProductsTierBadge) }</span>
 				}
-			</div>
+				if o.LowStock {
+					<span class="rounded-full bg-sand px-3 py-1 text-step-small font-semibold text-ink">{ p.T(i18n.ProductsLowStock) }</span>
+				}
+			}
 		</div>
+		<p class="offer-row-text mt-1 text-step-small text-ink-soft">
+			{ o.Name }
+			if o.Tagline != "" {
+				{ " · " + o.Tagline }
+			}
+		</p>
 	</article>
 }
 
@@ -383,7 +402,7 @@ templ Reasons(p Page, d LandingData) {
 	<section aria-labelledby="reasons-title" class="olive-texture-dark bg-olive-700 text-limewash">
 		<div class="container-page pt-5 md:pt-10">
 			<div aria-hidden="true" class="rounded-img aspect-[16/9] bg-olive-900 sm:aspect-[3/1]">
-				@Picture(StaticImage(p.Asset, "mill-bottles"), "", "100vw", false, "drift block h-full w-full", "pos-50-40")
+				@Picture(StaticImage(p.Asset, "grove-panorama"), "", "100vw", false, "drift block h-full w-full", "pos-50-60")
 			</div>
 		</div>
 		<div class="container-page section-y">
@@ -646,18 +665,17 @@ templ fact(label, value string) {
 }
 
 type howStep struct {
-	icon             func(string) templ.Component
-	title, body, tag i18n.Key
+	title, body i18n.Key
 }
 
 var howSteps = []howStep{
-	{IconClipboardList, i18n.HowStep1Title, i18n.HowStep1Body, i18n.HowStep1Tag},
-	{IconMessageCircle, i18n.HowStep2Title, i18n.HowStep2Body, i18n.HowStep2Tag},
-	{IconTruck, i18n.HowStep3Title, i18n.HowStep3Body, i18n.HowStep3Tag},
+	{i18n.HowStep1Title, i18n.HowStep1Body},
+	{i18n.HowStep2Title, i18n.HowStep2Body},
+	{i18n.HowStep3Title, i18n.HowStep3Body},
 }
 
-// HowItWorks: three steps on a path across a dark olive band, each with its
-// picture, what it takes, and a gold close: you pay at the door.
+// HowItWorks: ripe olives on the branch beside the three steps set
+// large (a real ordered list, no icons), and a gold close: you pay at the door.
 templ HowItWorks(p Page) {
 	<section aria-labelledby="how-title" class="olive-texture-dark bg-olive-950 text-limewash">
 		<div class="container-page section-y">
@@ -673,28 +691,21 @@ templ HowItWorks(p Page) {
 					@IconArrowForward("")
 				</a>
 			</div>
-			<ol class="how-path relative mt-14 grid gap-4 lg:grid-cols-3 lg:gap-6">
-				for i, s := range howSteps {
-					<li data-reveal class={ staggerClass(0.1 + float64(i)*0.1), "relative flex flex-col rounded-3xl bg-olive-900 p-6 sm:p-7" }>
-						<span class="sr-only">{ p.T(i18n.HowStepLabel, "n", strconv.Itoa(i+1)) }: </span>
-						<div class="flex flex-wrap items-center gap-4">
-							<span class="how-dot relative z-10 flex size-16 shrink-0 items-center justify-center rounded-full bg-olive-400 text-olive-950">
-								@s.icon("size-7")
-								<span aria-hidden="true" class="absolute -end-1 -top-1 flex size-7 items-center justify-center rounded-full bg-oil-bright text-step-small font-bold text-olive-950">{ strconv.Itoa(i + 1) }</span>
-							</span>
-							<h3 class="text-step-lead">{ p.T(s.title) }</h3>
-						</div>
-						<p class="mt-5 text-limewash/85">{ p.T(s.body) }</p>
-						<p class="mt-auto pt-6">
-							<span class="inline-flex items-center gap-2 rounded-full bg-limewash/10 px-3.5 py-1.5 text-step-small text-olive-200">
-								@IconCheck("size-4")
-								{ p.T(s.tag) }
-							</span>
-						</p>
-					</li>
-				}
-			</ol>
-			<p data-reveal class="stagger-40 mt-4 flex items-center gap-4 rounded-3xl bg-oil-bright px-6 py-5 font-semibold text-olive-950 lg:mt-6">
+			<div class="mt-14 grid gap-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:gap-16">
+				<figure data-reveal class="rounded-img aspect-[4/3] bg-olive-900 lg:aspect-auto lg:min-h-[28rem]">
+					@Picture(StaticImage(p.Asset, "olives-golden-hour"), "", "(min-width: 64rem) 42vw, 100vw", false, "drift block h-full w-full", "pos-50-50")
+				</figure>
+				<ol class="grid content-center gap-10">
+					for i, s := range howSteps {
+						<li data-reveal class={ staggerClass(0.1 + float64(i)*0.1) }>
+							<span class="sr-only">{ p.T(i18n.HowStepLabel, "n", strconv.Itoa(i+1)) }: </span>
+							<h3 class="text-step-sub">{ p.T(s.title) }</h3>
+							<p class="mt-3 max-w-[44ch] text-limewash/90">{ p.T(s.body) }</p>
+						</li>
+					}
+				</ol>
+			</div>
+			<p data-reveal class="stagger-40 mt-10 flex items-center gap-4 rounded-3xl bg-oil-bright px-6 py-5 font-semibold text-olive-950 lg:mt-6">
 				<span class="flex size-11 shrink-0 items-center justify-center rounded-full bg-olive-950 text-oil-bright">
 					@IconBanknote("size-5")
 				</span>
@@ -726,14 +737,9 @@ templ Story(p Page, d LandingData) {
 				</div>
 				<p data-reveal class="mt-8 text-step-lead">{ p.SiteName() }</p>
 				<p class="text-ink-soft">{ p.T(i18n.BrandPlace) }</p>
-				<div data-reveal class="stagger-10 mt-8 grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-3">
-					<div class="rounded-img aspect-[3/4] bg-olive-900">
-						@Picture(StaticImage(p.Asset, "coop-logo"), "", "(min-width: 64rem) 14rem, 40vw", false, "block h-full w-full", "pos-50-30")
-					</div>
-					<div class="rounded-img aspect-[3/4] bg-olive-900">
-						@Picture(StaticImage(p.Asset, "brand-cards"), "", "(min-width: 64rem) 21rem, 60vw", false, "block h-full w-full", "")
-					</div>
-				</div>
+				<figure data-reveal class="stagger-10 rounded-img mt-8 aspect-[7/4] bg-olive-900">
+					@Picture(StaticImage(p.Asset, "brand-cards"), "", "(min-width: 64rem) 36rem, 100vw", false, "block h-full w-full", "")
+				</figure>
 			</div>
 			<div class="min-w-0">
 				<figure data-reveal class="stagger-15 rounded-img aspect-[4/3] bg-olive-900">
